@@ -151,6 +151,7 @@ async function stopIfIdle() {
 // A Chromium browser to open MarkOS in its own window (no tabs or address bar).
 function findBrowser() {
   const env = process.env
+  if (env.MARKOS_BROWSER) return env.MARKOS_BROWSER // a browser of your choice (or a stand-in, for tests)
   const candidates = IS_WIN
     ? [
         path.join(env.LOCALAPPDATA ?? '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
@@ -207,7 +208,7 @@ async function night() {
   let state = 'running'
   for (let i = 0; i < 1440 && state === 'running'; i++) {
     await sleep(15_000)
-    try { state = (await (await fetch(`${URL}/api/night`, { signal: AbortSignal.timeout(5000) })).json())?.status ?? 'unknown' } catch { state = 'unknown' }
+    try { state = (await (await fetch(`${URL}/api/night`, { signal: AbortSignal.timeout(5000) })).json())?.night?.status ?? 'unknown' } catch { state = 'unknown' }
   }
   say(`night shift ended: ${state}`)
   await backup().catch((e) => say(`backup failed: ${e.message}`))
@@ -385,6 +386,10 @@ function doctor() {
   if (process.getuid?.() === 0) miss('Running as root', 'Run MarkOS as your own user, not with sudo: its database refuses root.')
   pass('Database: runs without Docker, nothing else to install')
   if (claudeFound()) { pass('Claude Code (make sure you are signed in: run `claude` and type /login)'); return blocked ? 'blocked' : 'ok' }
+  if (IS_WIN && (process.env.PATH ?? '').split(path.delimiter).some((d) => d && fs.existsSync(path.join(d, 'claude.cmd')))) {
+    say('  ! Claude Code is installed through npm (claude.cmd), which MarkOS can\'t start.\n      Install the native version in PowerShell: irm https://claude.ai/install.ps1 | iex   then run claude and type /login')
+    return blocked ? 'blocked' : 'warn'
+  }
   say(`  ! Claude Code isn't installed: the team needs it to work.\n      ${IS_WIN ? 'In PowerShell: irm https://claude.ai/install.ps1 | iex' : 'In a terminal: curl -fsSL https://claude.ai/install.sh | bash'}   then run claude and type /login`)
   return blocked ? 'blocked' : 'warn'
 }

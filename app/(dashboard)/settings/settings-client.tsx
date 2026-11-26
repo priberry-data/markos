@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Check, AlertCircle, Loader2, Trash2, Plus } from 'lucide-react'
-import { CLAUDE_INSTALL } from '@/lib/llm/install-hint'
+import { CLAUDE_INSTALL } from '@/lib/llm/install-commands'
 
 interface Props {
   profile: { name: string | null; role: string | null; company: string | null; sender_email: string | null; run_budget_usd: number }

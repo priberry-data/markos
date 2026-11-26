@@ -22,11 +22,16 @@ nothing is posted or sent without your click.
 
 ## Requirements
 
-MarkOS runs on **Mac, Windows and Linux**. Every change is installed from scratch and tested
-on all three by [CI](.github/workflows/ci.yml): Windows x64, Linux x64 and arm64, and macOS.
-Each run installs, starts the server, checks its pages, backs up, schedules the night shift,
-and runs the full test suite. It has been used day to day on a Mac. If a step fails on your
-machine, please [open an issue](https://github.com/priberry-data/markos/issues).
+MarkOS runs on **Mac, Windows and Linux**. On every change, [CI](.github/workflows/ci.yml)
+installs it from scratch on Windows x64 and Linux (x64 and arm64), with the one-line installers
+too, starts the server, checks its pages, backs up, runs a night shift and schedules it, and runs
+the full test suite. The Mac is tested by hand on Apple silicon (the same steps and the full
+suite) and in CI when GitHub has a Mac runner free. MarkOS has been used day to day on a Mac.
+
+What CI can't cover: a real Windows or Linux desktop (the window and shortcut are checked, not
+clicked), and real Claude Code on Windows or Linux (CI machines aren't signed in to a Claude
+plan, so agents there run on a stand-in). If anything fails on your machine, please
+[open an issue](https://github.com/priberry-data/markos/issues).
 
 - **Mac** (Apple silicon; Intel Macs should work but aren't in CI), **Windows 10 or 11** (x64), or **Linux** (x64 or arm64)
 - Node 22 or newer (`node --version`), from [nodejs.org](https://nodejs.org) or your package manager
@@ -148,7 +153,7 @@ enforces them.
 |---|---|
 | Agents get only the tools a step needs: web search, or read-only file tools. Never write, edit or shell tools. | `tests/llm/claude-code.test.ts` "gives each call only the tools it needs" |
 | One call never gets both the web and your files, so a web page can't steer an agent into leaking a file. | `tests/llm/claude-code.test.ts` "never gives one call both the web and files" |
-| File-reading calls are denied `.env*`, `*.pem` and SSH keys in every folder they may read. | `tests/llm/claude-code.test.ts` "denies reading secret files" |
+| File-reading calls are denied `.env*`, `*.pem` and SSH keys, in every folder they may read and everywhere else. Checked against real Claude Code on a Mac; on Windows the rules use Claude Code's documented path form (`/c/...`), not yet checked against real Claude Code there. | `tests/llm/claude-code.test.ts` "denies reading secret files" |
 | An `ANTHROPIC_API_KEY` in your environment never quietly moves billing off your plan. | `tests/llm/claude-code.test.ts` "never lets an API key switch billing" |
 | The server answers only this computer. Other websites, and pages whose domain points at 127.0.0.1, can't change anything. Scripts need a local token. | `tests/utils/local-guard.test.ts` |
 | The database gives nothing to a request with no key or the anon key, so a web page can't read it through 127.0.0.1. | `tests/engine/db-access.test.ts` |

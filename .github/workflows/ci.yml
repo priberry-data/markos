@@ -42,6 +42,11 @@ jobs:
         run: node -e "Promise.all(['/','/settings'].map(p=>fetch('http://localhost:3001'+p).then(r=>{console.log(p,r.status);if(r.status>=500)process.exit(1)}))).catch(e=>{console.error(e);process.exit(1)})"
       - name: backup
         run: node scripts/markos.mjs backup
+      - name: night shift, end to end (fake AI, no plan used)
+        timeout-minutes: 10
+        env:
+          MARKOS_FORCE_MODEL: fake:fake
+        run: node scripts/markos.mjs night
       - name: night shift schedule (install, then remove)
         if: runner.os != 'macOS'
         run: |
