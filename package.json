@@ -15,7 +15,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "setup": "node scripts/markos.mjs install",
+    "markos": "node scripts/markos.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.0",

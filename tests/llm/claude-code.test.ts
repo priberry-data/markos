@@ -2,8 +2,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { claudeCode, classifyFailure } from '@/lib/llm/providers/claude-code'
+import { claudeCode, classifyFailure, ruleDir } from '@/lib/llm/providers/claude-code'
 import { ProviderError, type ProviderRequest } from '@/lib/llm/types'
+import { supportDir } from '@/lib/utils/app-dirs'
 
 // Claude Code is driven as a child process, so these tests point the provider
 // at a fake `claude` that replays real-shaped stream-json and records how it
@@ -46,7 +47,7 @@ describe('claude code request', () => {
     expect(flag(args, '--system-prompt')).toBe('You are REX.')
     expect(flag(args, '--permission-mode')).toBe('dontAsk')
     expect(flag(args, '--model')).toBe('sonnet')
-    expect(cwd).toMatch(/MarkOS\/agent-workdir$/)
+    expect(cwd).toBe(join(supportDir(), 'agent-workdir'))
   })
 
   it('gives each call only the tools it needs — never write or shell tools', async () => {
@@ -76,12 +77,20 @@ describe('claude code request', () => {
   it('denies reading secret files in every folder it may read', async () => {
     await claudeCode.call({ ...base, readPaths: [dir] })
     const deny = flag(lastCall().args, '--disallowedTools').split(',')
-    expect(deny).toContain(`Read(/${dir}/**/.env*)`)
-    expect(deny).toContain(`Read(/${dir}/**/*.pem)`)
+    expect(deny).toContain(`Read(/${ruleDir(dir)}/**/.env*)`)
+    expect(deny).toContain(`Read(/${ruleDir(dir)}/**/*.pem)`)
+    // and everywhere, whatever the folder
+    expect(deny).toContain('Read(//**/.env*)')
     expect(deny.every(r => r.startsWith('Read(//'))).toBe(true)
 
     await claudeCode.call(base)
     expect(lastCall().args).not.toContain('--disallowedTools')
+  })
+
+  it('writes Windows folders the way Claude Code matches them', () => {
+    expect(ruleDir('C:\\Users\\a\\repo\\', 'win32')).toBe('/c/Users/a/repo')
+    expect(ruleDir('D:\\', 'win32')).toBe('/d')
+    expect(ruleDir('/home/a/repo/', 'linux')).toBe('/home/a/repo')
   })
 
   it('never lets an API key switch billing away from the plan', async () => {

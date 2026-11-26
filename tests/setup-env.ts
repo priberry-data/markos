@@ -13,7 +13,10 @@ if (fs.existsSync(file)) {
   }
 }
 
-const out = execFileSync('zsh', [path.join(repo, 'scripts/test-db.sh')], { encoding: 'utf8', timeout: 240_000 })
+// On a Mac, test-db.sh (Docker or native); elsewhere the Docker-free test database.
+const out = process.platform === 'darwin'
+  ? execFileSync('zsh', [path.join(repo, 'scripts/test-db.sh')], { encoding: 'utf8', timeout: 240_000 })
+  : execFileSync(process.execPath, [path.join(repo, 'scripts/test-db.mjs')], { encoding: 'utf8', timeout: 600_000 })
 const env = Object.fromEntries(out.split('\n').map(l => l.match(/^([A-Z_]+)="?(.*?)"?$/)).filter(Boolean).map(m => [m![1], m![2]]))
 if (!env.API_URL || !env.SERVICE_ROLE_KEY) throw new Error(`The test database didn't start:\n${out}`)
 process.env.NEXT_PUBLIC_SUPABASE_URL = env.API_URL

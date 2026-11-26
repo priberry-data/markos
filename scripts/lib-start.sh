@@ -15,7 +15,9 @@ mkdir -p "$LOG"
 
 # The local token: API changes from outside the MarkOS window (the night shift,
 # scripts) must present it. Created once, readable only by this user.
-TOKEN_FILE="$HOME/Library/Application Support/MarkOS/local-token"
+# MARKOS_HOME moves MarkOS's files (as in scripts/paths.mjs); the default is the usual Mac folder.
+SUPPORT="${MARKOS_HOME:-$HOME/Library/Application Support/MarkOS}"
+TOKEN_FILE="$SUPPORT/local-token"
 if [ ! -s "$TOKEN_FILE" ]; then
   mkdir -p "$(dirname "$TOKEN_FILE")"
   (umask 077; openssl rand -hex 32 > "$TOKEN_FILE")
@@ -26,7 +28,8 @@ TOKEN="$(cat "$TOKEN_FILE")"
 # Each install signs its database keys with its own secret. Supabase's default secret is
 # published, so with it anyone who can reach the database could use it. supabase/config.toml
 # reads it from MARKOS_JWT_SECRET; every script that runs `supabase` sources this file.
-SECRET_FILE="${MARKOS_SECRET_FILE:-$HOME/Library/Application Support/MarkOS/jwt-secret}"
+SECRET_FILE="${MARKOS_SECRET_FILE:-$SUPPORT/jwt-secret}"
+mkdir -p "$(dirname "$SECRET_FILE")"
 [ -s "$SECRET_FILE" ] || (umask 077; openssl rand -hex 32 > "$SECRET_FILE")
 chmod 600 "$SECRET_FILE"
 export MARKOS_JWT_SECRET="$(cat "$SECRET_FILE")"

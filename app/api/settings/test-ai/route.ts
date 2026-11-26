@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { generateText } from '@/lib/llm'
 import { AGENT_KEYS, modelFor, setModelOverrides, shapeModelFor, type AgentKey } from '@/lib/llm/models'
 import { claudeAuthStatus } from '@/lib/llm/providers/claude-code'
+import { claudeInstallHint } from '@/lib/llm/install-hint'
 import { listGeminiModels } from '@/lib/llm/providers/gemini'
 import { describeFailure } from '@/lib/engine/orchestrator'
 
@@ -24,10 +25,10 @@ export async function POST() {
     if (providers.has('claude-code')) {
       claude = await claudeAuthStatus()
       if (!claude.installed) {
-        return NextResponse.json({ ok: false, claude, error: 'Claude Code is not installed. In Terminal run: curl -fsSL https://claude.ai/install.sh | bash' })
+        return NextResponse.json({ ok: false, claude, error: `Claude Code is not installed. ${claudeInstallHint()}` })
       }
       if (!claude.loggedIn) {
-        return NextResponse.json({ ok: false, claude, error: 'Claude Code is installed but not signed in. In Terminal run `claude`, then type /login.' })
+        return NextResponse.json({ ok: false, claude, error: 'Claude Code is installed but not signed in. In a terminal run `claude`, then type /login.' })
       }
     }
 

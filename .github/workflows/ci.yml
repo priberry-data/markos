@@ -1,0 +1,109 @@
+# Every push: a fresh install on Windows, Linux and Mac, then the server, the test suite,
+# a backup and a stop. Uses its own folders (MARKOS_HOME), never anyone's real data.
+name: install and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      MARKOS_HOME: ${{ github.workspace }}/../markos-home
+      MARKOS_SHORTCUT_DIR: ${{ github.workspace }}/../desktop
+      MARKOS_BACKUP_DIR: ${{ github.workspace }}/../backups
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: doctor (Claude Code isn't on CI machines, so a warning is expected)
+        run: node scripts/markos.mjs doctor || true
+      - name: install
+        timeout-minutes: 15
+        run: node scripts/markos.mjs install
+      - name: start and health check
+        timeout-minutes: 5
+        run: |
+          node scripts/markos.mjs start
+          node -e "fetch('http://localhost:3001/api/health').then(r=>r.json()).then(j=>{console.log(j);if(!j.ok)process.exit(1)})"
+      - name: pages answer
+        run: node -e "Promise.all(['/','/settings'].map(p=>fetch('http://localhost:3001'+p).then(r=>{console.log(p,r.status);if(r.status>=500)process.exit(1)}))).catch(e=>{console.error(e);process.exit(1)})"
+      - name: backup
+        run: node scripts/markos.mjs backup
+      - name: night shift schedule (install, then remove)
+        if: runner.os != 'macOS'
+        run: |
+          node scripts/markos.mjs night-shift
+          node scripts/markos.mjs night-shift remove
+      - name: shortcut exists
+        shell: bash
+        run: ls -la "$MARKOS_SHORTCUT_DIR"
+      - name: stop
+        run: node scripts/markos.mjs stop
+      - name: tests
+        timeout-minutes: 15
+        run: npm test
+      - name: logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          for f in "$MARKOS_HOME"/logs/*.log "$MARKOS_HOME"/native/logs/*.log ~/Library/Logs/MarkOS/*.log; do [ -f "$f" ] && { echo "=== $f"; tail -60 "$f"; }; done; true
+  one-line-install:
+    name: one-line install (${{ matrix.os }}, ${{ matrix.how }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, how: download }
+          - { os: windows-latest, how: download }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      MARKOS_HOME: ${{ github.workspace }}/../oneline-home
+      MARKOS_DIR: ${{ github.workspace }}/../oneline-markos
+      MARKOS_SHORTCUT_DIR: ${{ github.workspace }}/../oneline-desktop
+      MARKOS_REF: ${{ github.ref_name }}
+      MARKOS_NO_GIT: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install with the one-liner (no git)
+        if: runner.os != 'Windows'
+        run: sh site/install.sh
+      - name: install with the one-liner (no git)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: Get-Content site/install.ps1 -Raw | Invoke-Expression
+      - name: start and health check
+        shell: bash
+        run: |
+          cd "$MARKOS_DIR"
+          node scripts/markos.mjs start
+          node -e "fetch('http://localhost:3001/api/health').then(r=>r.json()).then(j=>{console.log(j);if(!j.ok)process.exit(1)})"
+          node scripts/markos.mjs stop
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx eslint
+      - run: npx tsc --noEmit

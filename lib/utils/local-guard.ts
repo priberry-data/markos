@@ -1,16 +1,16 @@
 // Who may change things through MarkOS's API. MarkOS is single-user and local-only, so there is
 // no login. That makes three outside callers worth stopping:
-//  - another device on the same network (the server binds 127.0.0.1 only; see scripts/lib-start.sh),
+//  - another device on the same network (the server binds 127.0.0.1 only; see scripts/lib-start.sh and scripts/markos.mjs),
 //  - a web page in the founder's browser posting to localhost:3001 (cross-site request),
 //  - a page whose own domain resolves to 127.0.0.1 (DNS rebinding: the Host header gives it away).
 // Reads (GET/HEAD/OPTIONS) stay open to local callers. Changes need either the MarkOS window
 // itself (a same-origin request) or the local token (the night shift and scripts).
 import { readFileSync } from 'node:fs'
 import { timingSafeEqual } from 'node:crypto'
-import os from 'node:os'
 import path from 'node:path'
+import { supportDir } from './app-dirs'
 
-export const TOKEN_FILE = path.join(os.homedir(), 'Library', 'Application Support', 'MarkOS', 'local-token')
+export const TOKEN_FILE = path.join(/*turbopackIgnore: true*/ supportDir(), 'local-token')
 export const TOKEN_HEADER = 'x-markos-token'
 
 const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])

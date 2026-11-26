@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { db } from '@/lib/db'
 import { setModelOverrides, type AgentKey } from '@/lib/llm/models'
 import type { Source } from '@/lib/llm/types'
@@ -55,10 +56,18 @@ export async function workContext(productId: string | null): Promise<{ text: str
   }
 }
 
+function insideFolder(file: string, folder: string): boolean {
+  const fold = (p: string) => (process.platform === 'win32' ? path.resolve(/*turbopackIgnore: true*/ p).toLowerCase() : path.resolve(/*turbopackIgnore: true*/ p))
+  const rel = path.relative(fold(folder), fold(file))
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
 /** A cited source is kept only if it's a retrieved page or a file inside a folder the exec could read. */
 export function citationOk(value: string | null, known: Source[], readPaths: string[]): boolean {
   if (!value) return false
-  if (value.startsWith('/')) return readPaths.some(p => value.startsWith(p))
+  // A file path, on any system (/repo/x on Mac and Linux, C:\repo\x on Windows): it must sit inside
+  // a folder the exec could read, not merely start with the same letters (/repo2 isn't in /repo).
+  if (path.isAbsolute(value)) return readPaths.some(p => insideFolder(value, p))
   const norm = normalizeUrl(value)
   return known.some(s => normalizeUrl(s.url) === norm)
 }

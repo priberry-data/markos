@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Check, AlertCircle, Loader2, Trash2, Plus } from 'lucide-react'
+import { CLAUDE_INSTALL } from '@/lib/llm/install-hint'
 
 interface Props {
   profile: { name: string | null; role: string | null; company: string | null; sender_email: string | null; run_budget_usd: number }
@@ -61,7 +62,7 @@ export function SettingsClient({ profile, providers, agents, models, product, ru
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 bg-mk-bg border border-mk-line rounded-xl px-4 py-3">
             <div><p className="text-sm text-mk-text">Claude Code <span className="text-mk-muted">— default for every agent</span></p>
-              <p className="text-xs text-mk-muted">Runs on your Claude plan: no API key, no per-call bill. Install once in Terminal with <code className="text-mk-warn">curl -fsSL https://claude.ai/install.sh | bash</code>, then run <code className="text-mk-warn">claude</code> and type /login. The test below checks you’re signed in.</p></div>
+              <p className="text-xs text-mk-muted">Runs on your Claude plan: no API key, no per-call bill. Install once: on Mac or Linux run <code className="text-mk-warn">{CLAUDE_INSTALL.unix}</code> in a terminal; on Windows run <code className="text-mk-warn">{CLAUDE_INSTALL.windows}</code> in PowerShell. Then run <code className="text-mk-warn">claude</code> and type /login. The test below checks you’re signed in.</p></div>
             <Status ok={providers.claudeCode} yes="Installed" no="Not installed — agents can’t run" />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 bg-mk-bg border border-mk-line rounded-xl px-4 py-3">

@@ -1,7 +1,9 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, join } from 'node:path'
+import { supportDir } from '../../utils/app-dirs'
+import { claudeInstallHint } from '../install-hint'
 import { Provider, ProviderError, ProviderRequest, ProviderResponse, Source } from '../types'
 
 // Claude Code, run headless, on the founder's own Claude subscription — no API
@@ -23,18 +25,25 @@ const TIMEOUT_MS = 10 * 60_000
 export function claudeBinary(): string | null {
   const fromEnv = process.env.MARKOS_CLAUDE_BIN
   if (fromEnv && existsSync(fromEnv)) return fromEnv
+  // Windows: the native installer puts claude.exe in ~/.local/bin. An npm install leaves a
+  // claude.cmd, which Node can't start without a shell, so it isn't used.
+  const name = process.platform === 'win32' ? 'claude.exe' : 'claude'
   const candidates = [
-    join(/*turbopackIgnore: true*/ homedir(), '.local', 'bin', 'claude'),
-    join(/*turbopackIgnore: true*/ homedir(), '.claude', 'local', 'claude'),
-    ...(process.env.PATH ?? '').split(delimiter).filter(Boolean).map(dir => join(/*turbopackIgnore: true*/ dir, 'claude')),
-    '/opt/homebrew/bin/claude',
-    '/usr/local/bin/claude',
+    join(/*turbopackIgnore: true*/ homedir(), '.local', 'bin', name),
+    join(/*turbopackIgnore: true*/ homedir(), '.claude', 'local', name),
+    ...(process.env.PATH ?? '').split(delimiter).filter(Boolean).map(dir => join(/*turbopackIgnore: true*/ dir, name)),
+    ...(process.platform === 'win32' ? [] : ['/opt/homebrew/bin/claude', '/usr/local/bin/claude']),
   ]
   return candidates.find(c => existsSync(c)) ?? null
 }
 
+/** Start Claude Code. A .js/.mjs stand-in (MARKOS_CLAUDE_BIN, the tests) runs through Node, which works on Windows too. */
+function spawnClaude(bin: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv }): ChildProcessWithoutNullStreams {
+  return /\.m?js$/.test(bin) ? spawn(process.execPath, [bin, ...args], { ...opts, stdio: 'pipe' }) : spawn(bin, args, { ...opts, stdio: 'pipe' })
+}
+
 function workdir(): string {
-  const dir = join(/*turbopackIgnore: true*/ homedir(), 'Library', 'Application Support', 'MarkOS', 'agent-workdir')
+  const dir = join(/*turbopackIgnore: true*/ supportDir(), 'agent-workdir')
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -59,6 +68,19 @@ const EFFORT = { none: 'low', light: 'medium', deep: 'high' } as const
  * also skips gitignored files such as `.env.local` by default.
  */
 export const SECRET_FILE_GLOBS = ['**/.env*', '**/*.pem', '**/id_rsa*', '**/id_ed25519*'] as const
+
+/**
+ * A folder as Claude Code's permission rules write it. On Windows it matches paths in POSIX
+ * form, so C:\\Users\\a\\repo becomes /c/Users/a/repo (its documented normalization).
+ */
+export function ruleDir(dir: string, platform: string = process.platform): string {
+  if (platform === 'win32') {
+    const m = dir.match(/^([A-Za-z]):[\\/]*(.*)$/)
+    const rest = (m ? m[2] : dir).replace(/\\/g, '/').replace(/\/+$/, '')
+    return m ? `/${m[1].toLowerCase()}${rest ? `/${rest}` : ''}` : rest
+  }
+  return dir.replace(/\/+$/, '')
+}
 
 export function buildArgs(req: ProviderRequest): string[] {
   const readPaths = (req.readPaths ?? []).filter(p => existsSync(p))
@@ -88,8 +110,13 @@ export function buildArgs(req: ProviderRequest): string[] {
   if (tools.length) args.push('--allowedTools', tools.join(','))
   for (const dir of readPaths) args.push('--add-dir', dir)
   if (readPaths.length) {
-    // `//` makes a permission path absolute from the filesystem root.
-    const deny = readPaths.flatMap(dir => SECRET_FILE_GLOBS.map(g => `Read(/${dir.replace(/\/+$/, '')}/${g})`))
+    // `//` makes a permission path absolute from the filesystem root. Each readable folder gets
+    // its own rules, and the same files are also denied everywhere (`//**/…`, every drive on
+    // Windows), so the protection never hangs on how one path is written.
+    const deny = [
+      ...readPaths.flatMap(dir => SECRET_FILE_GLOBS.map(g => `Read(/${ruleDir(dir)}/${g})`)),
+      ...SECRET_FILE_GLOBS.map(g => `Read(//${g})`),
+    ]
     args.push('--disallowedTools', deny.join(','))
   }
   if (req.jsonSchema) args.push('--json-schema', JSON.stringify(req.jsonSchema))
@@ -254,14 +281,14 @@ export const claudeCode: Provider = {
     const bin = claudeBinary()
     if (!bin) {
       return Promise.reject(new ProviderError(
-        'Claude Code is not installed. Run: curl -fsSL https://claude.ai/install.sh | bash — then `claude` and /login.',
+        `Claude Code is not installed. ${claudeInstallHint()}`,
         'not_configured',
       ))
     }
     if (req.signal?.aborted) return Promise.reject(new ProviderError('Cancelled.', 'aborted'))
 
     return new Promise((resolve, reject) => {
-      const child = spawn(bin, buildArgs(req), { cwd: workdir(), env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] })
+      const child = spawnClaude(bin, buildArgs(req), { cwd: workdir(), env: childEnv() })
       const events: StreamEvent[] = []
       let buffer = ''
       let stderr = ''
@@ -331,7 +358,7 @@ export async function claudeAuthStatus(): Promise<{ installed: boolean; loggedIn
   const bin = claudeBinary()
   if (!bin) return { installed: false, loggedIn: false, method: null }
   return new Promise(resolve => {
-    const child = spawn(bin, ['auth', 'status'], { env: childEnv() })
+    const child = spawnClaude(bin, ['auth', 'status'], { env: childEnv() })
     let out = ''
     child.stdout.on('data', d => { out += d })
     child.on('error', () => resolve({ installed: true, loggedIn: false, method: null }))

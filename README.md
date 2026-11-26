@@ -1,8 +1,8 @@
 # MarkOS by Priberry
 
-**[markos.priberry.com](https://markos.priberry.com)** · open source (Apache-2.0) · runs on your Mac
+**[markos.priberry.com](https://markos.priberry.com)** · open source (Apache-2.0) · runs on your own computer: Mac, Windows or Linux
 
-An executive team that runs on your own Mac and works overnight. Every morning
+An executive team that runs on your own computer and works overnight. Every morning
 you open it to a brief from your Chief of Staff, with reports from your CMO, CFO,
 CPO, CTO, Sales and COO across every product you run. You write one instruction,
 in any words, and the Chief of Staff sends each part to the exec who owns it.
@@ -22,46 +22,86 @@ nothing is posted or sent without your click.
 
 ## Requirements
 
-MarkOS runs on a Mac. It has been used day to day on one Mac, and a fresh clone installs
-there in one command. It hasn't been tried on many machines yet, so if a step fails, please
-[open an issue](https://github.com/priberry-data/markos/issues).
+MarkOS runs on **Mac, Windows and Linux**. Every change is installed from scratch and tested
+on all three by [CI](.github/workflows/ci.yml): Windows x64, Linux x64 and arm64, and macOS.
+Each run installs, starts the server, checks its pages, backs up, schedules the night shift,
+and runs the full test suite. It has been used day to day on a Mac. If a step fails on your
+machine, please [open an issue](https://github.com/priberry-data/markos/issues).
 
-- A Mac. Built and used on Apple silicon; Intel Macs should work but haven't been tried.
-- Node 22 or newer (`node --version`)
-- Claude Code, signed in to your Claude plan: `curl -fsSL https://claude.ai/install.sh | bash`,
-  then run `claude` and type `/login`. The agents run on your plan, so there's no per-call bill.
+- **Mac** (Apple silicon; Intel Macs should work but aren't in CI), **Windows 10 or 11** (x64), or **Linux** (x64 or arm64)
+- Node 22 or newer (`node --version`), from [nodejs.org](https://nodejs.org) or your package manager
+- Claude Code, signed in to your Claude plan. The agents run on your plan, so there's no per-call bill.
+  - Mac or Linux: `curl -fsSL https://claude.ai/install.sh | bash`
+  - Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`
+  - then run `claude` and type `/login`
 
-That's all. No Docker. Run `./scripts/preflight.sh` to check it before you start.
+That's all. No Docker. `node scripts/markos.mjs doctor` checks it before you start.
 
 ## Install
 
+One line. It puts MarkOS in `~/markos` (git if you have it, otherwise a download from GitHub)
+and runs the installer. Run it again to update.
+
+**Mac or Linux**
+
 ```bash
-git clone https://github.com/priberry-data/markos && cd markos && ./install.sh
+curl -fsSL https://markos.priberry.com/install.sh | sh
 ```
 
-It checks your Mac, installs, sets up the database and puts a MarkOS app on your Desktop.
-Each step is also a script of its own in `scripts/` (`preflight.sh`, `setup-db.sh`,
-`make-desktop-app.sh`) if you'd rather run them one at a time.
+**Windows** (PowerShell)
 
-Then open **MarkOS** from the Desktop. It starts the database if needed, builds when the
-code has changed, and opens on the morning brief. Closing the window stops the server once
-any work in progress finishes. Logs are in `~/Library/Logs/MarkOS/`.
+```powershell
+irm https://markos.priberry.com/install.ps1 | iex
+```
+
+Read them first if you like: [install.sh](site/install.sh), [install.ps1](site/install.ps1).
+Or clone and run the installer yourself:
+
+```bash
+git clone https://github.com/priberry-data/markos && cd markos && ./install.sh                                # Mac or Linux
+git clone https://github.com/priberry-data/markos; cd markos; powershell -ExecutionPolicy Bypass -File install.ps1   # Windows
+```
+
+It checks your computer, installs, sets up the database and puts MarkOS on your Desktop: an
+app on a Mac, a shortcut on Windows, a launcher (and an entry in your app menu) on Linux. Run it
+again any time; it's safe.
+
+Then open **MarkOS** from the Desktop, or run `node scripts/markos.mjs open`. It starts the
+database if needed, builds when the code has changed, and opens on the morning brief in its own
+window (Chrome or Edge; otherwise your default browser). Closing the window stops the server
+once any work in progress finishes.
+
+Everything else is one command too, the same on every system:
+
+```bash
+node scripts/markos.mjs start | stop      # the server and database, without a window
+node scripts/markos.mjs night-shift       # run the night shift daily at 02:00 (add "remove" to undo)
+node scripts/markos.mjs backup            # back up your data now
+node scripts/markos.mjs restore <file>    # put a backup back
+```
+
+**Where MarkOS keeps its files**
+
+| | Data | Logs |
+|---|---|---|
+| Mac | `~/Library/Application Support/MarkOS` | `~/Library/Logs/MarkOS` |
+| Windows | `%LOCALAPPDATA%\MarkOS` | `%LOCALAPPDATA%\MarkOS\logs` |
+| Linux | `~/.local/share/markos` | `~/.local/state/markos/logs` |
 
 **Light on memory.** The database is Postgres 17 with PostgREST in front, running directly
-on your Mac: about 80 MB of memory when idle. The first `setup-db.sh` downloads Postgres
-from npm (about 340 MB, once) and PostgREST from its GitHub release, checked against its
-published checksum, into `~/Library/Application Support/MarkOS/runtime`. Pages poll for
-updates every few seconds, and only while the tab is visible. Tested on Apple silicon;
-Intel Macs should work but haven't been tried.
+on your computer: about 80 MB of memory when idle (measured on a Mac). The installer downloads
+Postgres from npm (once) and PostgREST from its GitHub release, checked against its published
+checksum, into the `runtime` folder above. Pages poll for updates every few seconds, and only
+while the tab is visible.
 
-**The database stays on your Mac.** Both ports listen on 127.0.0.1 only. Each install signs
-its keys with its own random secret (`~/Library/Application Support/MarkOS/jwt-secret`),
-and a request without the server's key gets nothing.
+**The database stays on your computer.** Both ports listen on 127.0.0.1 only. Each install
+signs its keys with its own random secret (`jwt-secret` in the data folder), and a request
+without the server's key gets nothing.
 
-**Already on Docker?** Earlier versions ran the database in Docker with Supabase, using a
+**Already on Docker? (Mac)** Earlier versions ran the database in Docker with Supabase, using a
 2 GB VM. They keep working as they are. To move off Docker, run
 `./scripts/setup-db.sh --native`: it copies every row across and leaves the Docker volume
-untouched. To set up a new install on Docker anyway, use `--docker`; it needs
+untouched. To set up a new install on Docker anyway, use `./install.sh --docker`; it needs
 `brew install colima docker supabase/tap/supabase`, caps the VM at 2 GB
 (`MARKOS_VM_MEMORY`), runs only the Supabase services MarkOS uses, and binds them to this
 Mac. Start a Docker database with the scripts, not a bare `supabase start`: without this
@@ -74,8 +114,9 @@ install's secret it comes up on keys that match nothing.
 2. **Products**: add each product, point it at its repo folder, press *Read the product*, and
    confirm what the team read. Where the repo contradicts itself, both versions are listed and
    nothing is guessed.
-3. **Night shift**: `./scripts/install-night-shift.sh` runs it every day at 02:00, or as soon as
-   the Mac wakes.
+3. **Night shift**: `node scripts/markos.mjs night-shift` runs it every day at 02:00 (launchd on a
+   Mac, Task Scheduler on Windows, a systemd user timer or cron on Linux). A computer that was
+   asleep or off at 02:00 runs it when it wakes.
 4. Optional, in `.env.local`:
    - `RESEND_API_KEY` + `RESEND_FROM_EMAIL` to send outreach you approve
    - your own X / LinkedIn app keys, then connect them in Settings so approved posts go out on time
@@ -109,21 +150,22 @@ enforces them.
 | One call never gets both the web and your files, so a web page can't steer an agent into leaking a file. | `tests/llm/claude-code.test.ts` "never gives one call both the web and files" |
 | File-reading calls are denied `.env*`, `*.pem` and SSH keys in every folder they may read. | `tests/llm/claude-code.test.ts` "denies reading secret files" |
 | An `ANTHROPIC_API_KEY` in your environment never quietly moves billing off your plan. | `tests/llm/claude-code.test.ts` "never lets an API key switch billing" |
-| The server answers only this Mac. Other websites, and pages whose domain points at 127.0.0.1, can't change anything. Scripts need a local token. | `tests/utils/local-guard.test.ts` |
+| The server answers only this computer. Other websites, and pages whose domain points at 127.0.0.1, can't change anything. Scripts need a local token. | `tests/utils/local-guard.test.ts` |
 | The database gives nothing to a request with no key or the anon key, so a web page can't read it through 127.0.0.1. | `tests/engine/db-access.test.ts` |
 | Every agent prompt carries the chain of command. | `tests/engine/team.test.ts` "no agent prompt in the engine is written without it" |
 
 ## Your data
 
-Everything lives in a Postgres database on your Mac. `./scripts/backup-data.sh` writes a
-compressed dump after every night shift, to iCloud Drive → *MarkOS Backups* when iCloud is
-on, otherwise to `~/Library/Application Support/MarkOS/backups`. It keeps the last 30.
-Restore with `./scripts/restore-data.sh <file>`. Secrets in `.env.local` and your X /
+Everything lives in a Postgres database on your computer. `node scripts/markos.mjs backup` writes
+a compressed dump, and runs after every night shift: on a Mac to iCloud Drive → *MarkOS Backups*
+when iCloud is on, otherwise to `backups` in the data folder (`MARKOS_BACKUP_DIR` to choose,
+for example a synced Dropbox or OneDrive folder). It keeps the last 30. Restore with
+`node scripts/markos.mjs restore <file>`. Secrets in `.env.local` and your X /
 LinkedIn connections are never in git or the backups: keep the secrets in your password
 manager, and reconnect the accounts after a restore.
 
 The server listens only on 127.0.0.1. Changes through its API need either the MarkOS window
-itself or the local token in `~/Library/Application Support/MarkOS/local-token`, which is
+itself or the local token (`local-token` in the data folder), which is
 created on first start and used by the night shift.
 
 ## The executive team
@@ -166,8 +208,9 @@ switches, and your choice is remembered.
 **Myra, your Executive Assistant**, books a meeting only when something needs you:
 - She stays inside your meeting windows and under your daily limit (Settings → Your
   working day).
-- Each meeting gets an agenda and a pre-read, and goes on your Mac Calendar in a
-  "MarkOS" calendar. macOS asks once for permission.
+- Each meeting gets an agenda and a pre-read, and shows on MarkOS's Calendar page. On a Mac
+  it also goes on your Mac Calendar in a "MarkOS" calendar (macOS asks once for permission);
+  on Windows and Linux it stays in MarkOS.
 - In the meeting room you talk to the execs. When you end the meeting, Myra writes the
   minutes, and every action item becomes a dated task. Yours show as your to-dos.
 - She books at most one decision meeting a day (the five decisions that matter most),
@@ -245,15 +288,16 @@ REX research ──► SAGE strategy ──► you approve / edit / ask for a re
 
 ## Development
 
-On an Apple Silicon Mac, make sure `node` is the arm64 build (`node -p process.arch` prints
+On any system: `node scripts/markos.mjs start` brings up the database once, then the commands
+below work. On an Apple Silicon Mac, make sure `node` is the arm64 build (`node -p process.arch` prints
 `arm64`). An x86 Node under Rosetta works but is slow and can break the CSS build.
 
 ```bash
-./scripts/setup-db.sh                              # start the database (once; MarkOS.app does it after)
+node scripts/native-db.mjs start                   # start the database (MarkOS does it on open)
 node node_modules/next/dist/bin/next dev --port 3001
 node node_modules/vitest/vitest.mjs run             # unit + integration tests (fake AI, local DB)
 EVAL_PRODUCT="Your product" node node_modules/vitest/vitest.mjs run tests/eval-launch.test.ts   # real launch, real AI
-./scripts/night-shift.sh                           # a night shift now, the way launchd runs it
+node scripts/markos.mjs night                      # a night shift now, the way the schedule runs it
 ```
 
 ```
@@ -263,7 +307,8 @@ lib/engine/execs/   the executive team: roster, facts, reports, tasks, Chief of 
 lib/social/         posting approved content to X / LinkedIn
 app/(dashboard)/    Today, Approvals, Research, Strategy, Content, Distribution, Search, …
 supabase/migrations the schema, then one file per later change (applied at start)
-scripts/            make-desktop-app.sh, night-shift.sh, install-night-shift.sh, lib-start.sh (shared start-up)
+scripts/            markos.mjs (install, open, start, stop, night shift, backup; every system), native-db.mjs (the database),
+                    paths.mjs (per-system folders); Mac extras: make-desktop-app.sh, night-shift.sh, lib-start.sh
 ```
 
 ## Licence

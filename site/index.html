@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MarkOS · an AI executive team on your Mac</title>
-<meta name="description" content="Open source. A morning brief from your Chief of Staff, overnight work by your CMO, CFO, CPO, CTO, Sales and COO, and nothing sent without your click. Runs on your Mac and your Claude plan.">
+<title>MarkOS · an AI executive team on your own computer</title>
+<meta name="description" content="Open source. A morning brief from your Chief of Staff, overnight work by your CMO, CFO, CPO, CTO, Sales and COO, and nothing sent without your click. Runs on Mac, Windows and Linux, on your Claude plan.">
 <link rel="canonical" href="https://markos.priberry.com/">
-<meta property="og:title" content="MarkOS: an AI executive team on your Mac">
+<meta property="og:title" content="MarkOS: an AI executive team on your own computer">
 <meta property="og:description" content="A morning brief from your Chief of Staff and overnight work by your whole exec team. Open source, local, and nothing sent without your click.">
 <meta property="og:url" content="https://markos.priberry.com/">
 <meta property="og:type" content="website">
@@ -31,6 +31,9 @@ h1{font-size:clamp(38px,7vw,68px);line-height:1.04;letter-spacing:-.035em;margin
 .install code{font:14.5px/1.4 ui-monospace,"SF Mono",Menlo,monospace;white-space:nowrap;overflow-x:auto;display:block;max-width:calc(100vw - 150px)}
 .btn{border:0;border-radius:10px;padding:8px 14px;font:600 14px/1 inherit;cursor:pointer;background:var(--fg);color:var(--bg)}
 .sub{color:var(--dim);font-size:14.5px;margin-top:14px}
+.os{display:inline-flex;gap:4px;background:var(--code);border:1px solid var(--line);border-radius:999px;padding:4px;margin:0 0 12px}
+.os button{border:0;background:none;color:var(--dim);font:600 13.5px/1 inherit;padding:7px 14px;border-radius:999px;cursor:pointer}
+.os button[aria-selected="true"]{background:var(--fg);color:var(--bg)}
 .sub b{color:var(--fg);font-weight:600}
 .shot{margin:46px auto 0;max-width:820px;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);text-align:left;overflow:hidden}
 .bar{display:flex;gap:7px;padding:12px 16px;border-bottom:1px solid var(--line);align-items:center}
@@ -80,10 +83,12 @@ footer p{margin:6px 0}
 </nav>
 
 <header class="hero">
-  <h1>Your executive team.<br>Running on your Mac.</h1>
+  <h1>Your executive team.<br>Running on your computer.</h1>
   <p class="lede">Every morning, a brief from your Chief of Staff with reports from your CMO, CFO, CPO, CTO, Sales and COO. Write one instruction in any words; it goes to the exec who owns it. Nothing is posted or sent without your click.</p>
-  <div class="install"><code id="cmd">git clone https://github.com/priberry-data/markos &amp;&amp; cd markos &amp;&amp; ./install.sh</code><button class="btn" id="copy" type="button">Copy</button></div>
-  <p class="sub"><b>Free and open source</b> (Apache-2.0) · runs on your Claude plan, no API key · no Docker, no cloud</p>
+  <div><div class="os" role="tablist" aria-label="Your system"><button type="button" role="tab" data-os="unix" aria-selected="true">Mac</button><button type="button" role="tab" data-os="unix" aria-selected="false">Linux</button><button type="button" role="tab" data-os="win" aria-selected="false">Windows</button></div></div>
+  <div class="install"><code id="cmd">curl -fsSL https://markos.priberry.com/install.sh | sh</code><button class="btn" id="copy" type="button">Copy</button></div>
+  <p class="sub" style="margin-top:8px">Prefer git? <a href="https://github.com/priberry-data/markos#install">Clone it</a> and run <code>./install.sh</code> or <code>install.ps1</code>. Read the installer first: <a href="/install.sh">install.sh</a> · <a href="/install.ps1">install.ps1</a></p>
+  <p class="sub"><b>Free and open source</b> (Apache-2.0) · <b>Mac, Windows and Linux</b> · runs on your Claude plan, no API key · no Docker, no cloud</p>
 
   <div class="shot" role="img" aria-label="An example morning brief">
     <div class="bar"><i></i><i></i><i></i><span>MarkOS · Home</span></div>
@@ -105,7 +110,7 @@ footer p{margin:6px 0}
   <h2>How it works</h2>
   <p class="intro">Point it at your products once. It works overnight and hands you decisions, not busywork.</p>
   <div class="grid steps">
-    <div class="card"><h4>Install</h4><p>One command. It checks your Mac, sets up a small local database and puts MarkOS on your Desktop.</p></div>
+    <div class="card"><h4>Install</h4><p>One command on Mac, Windows or Linux. It checks your computer, sets up a small local database and puts MarkOS on your Desktop.</p></div>
     <div class="card"><h4>Show it your products</h4><p>Add each product and its repo folder. The team reads it and asks you to confirm what it understood. Where docs disagree, it lists both and guesses nothing.</p></div>
     <div class="card"><h4>Wake up to a brief</h4><p>The night shift researches, drafts and reports, within a nightly cap that fits a Claude plan. You approve, edit or reject in the morning.</p></div>
   </div>
@@ -132,7 +137,7 @@ footer p{margin:6px 0}
     <tr><td><span class="check">✓</span>Agents get only the tools a step needs: web search, or read-only file tools. Never write, edit or shell tools.</td><td><code>tests/llm/claude-code.test.ts</code></td></tr>
     <tr><td><span class="check">✓</span>One call never gets both the web and your files, so a web page can't steer an agent into leaking a file.</td><td><code>tests/llm/claude-code.test.ts</code></td></tr>
     <tr><td><span class="check">✓</span>File-reading calls are denied <code>.env*</code>, <code>*.pem</code> and SSH keys.</td><td><code>tests/llm/claude-code.test.ts</code></td></tr>
-    <tr><td><span class="check">✓</span>The app answers only this Mac. Other websites can't change anything.</td><td><code>tests/utils/local-guard.test.ts</code></td></tr>
+    <tr><td><span class="check">✓</span>The app answers only this computer. Other websites can't change anything.</td><td><code>tests/utils/local-guard.test.ts</code></td></tr>
     <tr><td><span class="check">✓</span>The database gives nothing to a request without the app's own key, and every table has Row Level Security on.</td><td><code>tests/engine/db-access.test.ts</code></td></tr>
     <tr><td><span class="check">✓</span>Nothing public happens on its own: a post goes out only after you approve it, an email only when you press Send.</td><td>The product's rules, in the README</td></tr>
   </table></div>
@@ -142,9 +147,9 @@ footer p{margin:6px 0}
 <section>
   <h2>Light, local, yours</h2>
   <div class="facts">
-    <div class="card"><b>~390 MB</b><span>for the whole app, measured with every page loaded</span></div>
+    <div class="card"><b>~390 MB</b><span>for the whole app, measured on a Mac with every page loaded</span></div>
     <div class="card"><b>127.0.0.1</b><span>the only address it listens on</span></div>
-    <div class="card"><b>Backed up</b><span>after every night shift, to iCloud Drive or your Mac; last 30 kept</span></div>
+    <div class="card"><b>Backed up</b><span>after every night shift, to a folder you choose (iCloud Drive on a Mac); last 30 kept</span></div>
     <div class="card"><b>$0</b><span>per call: it runs on your Claude plan through Claude Code</span></div>
   </div>
 </section>
@@ -152,10 +157,11 @@ footer p{margin:6px 0}
 <section>
   <h2>What you need</h2>
   <ul class="honest">
-    <li>A Mac. Built and used on Apple silicon; Intel Macs should work but haven't been tried.</li>
+    <li>A Mac (Apple silicon), a Windows 10 or 11 PC (x64), or a Linux machine (x64 or arm64). Every change is installed and tested on all three by the repo's CI.</li>
     <li>Node 22 or newer.</li>
     <li>Claude Code, signed in to your Claude plan (run <code>claude</code>, then <code>/login</code>).</li>
-    <li>That's all. MarkOS is new and has been used day to day on one Mac. If a step fails, <a href="https://github.com/priberry-data/markos/issues">open an issue</a> and we'll fix it.</li>
+    <li>That's all. Adding meetings to your calendar app works on a Mac only; on Windows and Linux they stay in MarkOS's own calendar.</li>
+    <li>MarkOS is new and has been used day to day on a Mac. If a step fails on your machine, <a href="https://github.com/priberry-data/markos/issues">open an issue</a> and we'll fix it.</li>
   </ul>
 </section>
 
@@ -172,6 +178,18 @@ footer p{margin:6px 0}
 </footer>
 </div>
 <script>
+const CMD = {
+  unix: 'curl -fsSL https://markos.priberry.com/install.sh | sh',
+  win: 'irm https://markos.priberry.com/install.ps1 | iex',
+}
+const tabs = [...document.querySelectorAll('.os button')]
+const pick = btn => {
+  tabs.forEach(b => b.setAttribute('aria-selected', String(b === btn)))
+  document.getElementById('cmd').textContent = CMD[btn.dataset.os]
+}
+tabs.forEach(b => b.addEventListener('click', () => pick(b)))
+const ua = navigator.userAgent
+if (/Windows/.test(ua)) pick(tabs[2]); else if (/Linux|X11/.test(ua) && !/Android/.test(ua)) pick(tabs[1])
 document.getElementById('copy').addEventListener('click', async e => {
   const t = document.getElementById('cmd').textContent
   try { await navigator.clipboard.writeText(t); e.target.textContent = 'Copied' } catch { e.target.textContent = 'Select and copy' }

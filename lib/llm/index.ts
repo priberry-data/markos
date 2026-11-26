@@ -4,6 +4,7 @@ import { costUsd } from './pricing'
 import { describeIssues, extractJson, toProviderSchema } from './schema'
 import { AGENTS, AgentKey, modelFor, shapeModelFor } from './models'
 import { claudeCode } from './providers/claude-code'
+import { claudeInstallHint } from './install-hint'
 import { gemini } from './providers/gemini'
 import { anthropic } from './providers/anthropic'
 import { fake } from './providers/fake'
@@ -121,7 +122,7 @@ async function callOnce({ ctx, model, purpose, request }: RawCall): Promise<Prov
   if (!provider) throw new ProviderError(`Unknown AI provider "${model.provider}".`, 'not_configured')
   if (!provider.isConfigured()) {
     if (model.provider === 'claude-code') {
-      throw new ProviderError('Claude Code is not installed. Run: curl -fsSL https://claude.ai/install.sh | bash — then `claude` and /login.', 'not_configured')
+      throw new ProviderError(`Claude Code is not installed. ${claudeInstallHint()}`, 'not_configured')
     }
     const envVar = model.provider === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY'
     throw new ProviderError(`${envVar} is not set. Add it to .env.local to use ${AGENTS[ctx.agent].name}.`, 'not_configured')
