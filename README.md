@@ -157,7 +157,7 @@ You can write in it at any time:
 - At most three answer you, and a teammate's answer never asks back, so it can't loop.
 
 **Voice and live routing.** The command box on the brief and the team room take
-dictation (Chrome speech; English-India or Hindi/Hinglish). While you speak or type,
+dictation (Chrome speech, in eight languages: pick yours next to the mic). While you speak or type,
 the team on the side lights up: instantly from what you say, then from what you mean.
 
 **Light or dark.** MarkOS starts in light mode. The sun/moon button at the top right
