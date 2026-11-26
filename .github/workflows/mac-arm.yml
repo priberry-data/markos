@@ -1,0 +1,38 @@
+# The same fresh install and tests on an Apple-silicon Mac, weekly and on demand. Separate from
+# ci.yml because GitHub's arm64 Macs are often at capacity and a queued job would block a push.
+name: Apple-silicon Mac
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      MARKOS_HOME: ${{ github.workspace }}/../markos-home
+      MARKOS_SHORTCUT_DIR: ${{ github.workspace }}/../desktop
+      MARKOS_BACKUP_DIR: ${{ github.workspace }}/../backups
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: node scripts/markos.mjs install
+      - name: start and health check
+        run: |
+          node scripts/markos.mjs start
+          node -e "fetch('http://localhost:3001/api/health').then(r=>r.json()).then(j=>{console.log(j);if(!j.ok)process.exit(1)})"
+      - run: node scripts/markos.mjs backup
+      - name: night shift (fake AI)
+        env:
+          MARKOS_FORCE_MODEL: fake:fake
+        run: node scripts/markos.mjs night
+      - run: ls -la "$MARKOS_SHORTCUT_DIR"
+      - run: node scripts/markos.mjs stop
+      - run: npm test

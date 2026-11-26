@@ -407,8 +407,18 @@ async function install() {
   say('\n4/4  Putting MarkOS on your Desktop…')
   if (process.env.MARKOS_NO_SHORTCUT) say('Skipped (MARKOS_NO_SHORTCUT).')
   else shortcut()
-  say(`\nDone. Open MarkOS from your Desktop, or run: node scripts/markos.mjs open`)
-  say('Then: Settings → Test AI connection.')
+  say(`\nDone. Open MarkOS from your Desktop any time, or run: node scripts/markos.mjs open`)
+  say('First stop: Settings → Test AI connection.')
+  // Open it now, the way an app opens after it installs: only for a person at a terminal, never in
+  // CI, and on Linux only with a screen (an SSH session gets the address instead).
+  const screen = IS_WIN || IS_MAC || process.env.DISPLAY || process.env.WAYLAND_DISPLAY
+  if (process.stdout.isTTY && !process.env.CI && !process.env.MARKOS_NO_OPEN) {
+    if (screen) {
+      say('\nOpening MarkOS…')
+      if (IS_MAC) spawn('open', [process.env.MARKOS_APP || path.join(os.homedir(), 'Desktop', 'MarkOS.app')], { detached: true, stdio: 'ignore' }).unref()
+      else spawn(NODE, [SELF, 'open'], { cwd: REPO, detached: true, windowsHide: true, stdio: 'ignore' }).unref()
+    } else say(`\nNo screen here: run "node scripts/markos.mjs start", then open ${URL} from a browser on this machine.`)
+  }
   if (!claudeFound()) say('Claude Code isn’t installed yet: MarkOS runs, but the team needs it to work (see above).')
 }
 
