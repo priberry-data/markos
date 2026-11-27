@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 // Tests run against a SEPARATE test database (test-db/, ports 563xx), never the
@@ -36,6 +37,9 @@ for (const k of Object.keys(process.env)) if (k.startsWith('DATA_URL_')) delete 
 
 // Tests never touch the founder's real calendar.
 process.env.MARKOS_CALENDAR = 'off'
+
+// Tests never read or write the founder's own MarkOS folder (keys in ai.json, the local token).
+if (!process.env.MARKOS_HOME) process.env.MARKOS_HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'markos-test-home-')))
 
 // Every AI call in the test process goes to the fake provider.
 process.env.MARKOS_FORCE_MODEL = 'fake:fake'

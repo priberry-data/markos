@@ -5,11 +5,12 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/lib/db'
 import { setFakeHandler } from '@/lib/llm/providers/fake'
-import { AGENT_KEYS } from '@/lib/llm/models'
+import { AGENT_KEYS, teamDefault } from '@/lib/llm/models'
+import { applyModelSettings } from '@/lib/engine/execs/context'
 import { ProviderError, type ProviderRequest } from '@/lib/llm/types'
 import { submitDirective } from '@/lib/engine/execs/chief-of-staff'
 import { confirmIntake } from '@/lib/engine/execs/intake'
-import { startNight } from '@/lib/engine/execs/night'
+import { fallbackBrief, startNight } from '@/lib/engine/execs/night'
 import { writeReport } from '@/lib/engine/execs/report'
 import { executeTask, createTasks } from '@/lib/engine/execs/tasks'
 
@@ -273,6 +274,76 @@ describe('the night shift', () => {
     const { data } = await db().from('tasks').select('status').eq('id', id).single()
     expect(data!.status).toBe('queued')
     await db().from('tasks').delete().eq('id', id)
+  })
+
+  it('goes on without the web, and says why, when no AI that can search can be used', async () => {
+    // Handed on by another exec, so this test adds no handoffs of its own.
+    const [id] = await createTasks([{ exec: 'sales', productId, task: 'No-search test task', origin: 'cmo' }])
+    let prompt = ''
+    setFakeHandler(req => {
+      if (req.grounded) throw new ProviderError('Claude Code is installed but not signed in.', 'auth')
+      if (props(req).includes('deliverable')) prompt = req.prompt
+      return fakeTeam(req)
+    })
+    await executeTask(id)
+    const { data } = await db().from('tasks').select('status, result, result_summary').eq('id', id).single()
+    expect(data!.status).toBe('done')
+    expect(prompt).toContain('NO WEB SEARCH: the web search couldn’t run (Claude Code is installed but not signed in.)')
+    // Where the founder reads it: the task's summary (also in the morning brief) and the team room.
+    expect(data!.result_summary).toMatch(/Done without a web search, which couldn’t run: Claude Code is installed but not signed in/)
+    const { data: done } = await db().from('team_messages').select('content').eq('task_id', id).eq('kind', 'done').single()
+    expect(done!.content).toMatch(/Done without a web search.*not signed in/)
+    expect(data!.result.open_questions).toEqual(expect.arrayContaining([expect.stringMatching(/without a web search.*not signed in/)]))
+    await db().from('tasks').delete().eq('id', id)
+  })
+
+  it('on a team running on another AI, a search stopped by Claude Code’s plan limit is skipped, and the rest of the night goes on', async () => {
+    // The team's AI as set for this computer (a choice saved in Settings would win, and no test
+    // writes those); the calls themselves still go to the test AI.
+    const before = process.env.MARKOS_MODEL_DEFAULT
+    process.env.MARKOS_MODEL_DEFAULT = 'ollama:qwen3:8b'
+    try {
+      await applyModelSettings()
+      expect(teamDefault()).toEqual({ provider: 'ollama', model: 'qwen3:8b' })
+      setFakeHandler(req => {
+        // Claude Code, lent only for web searches, is at its plan limit; everything else answers.
+        if (req.grounded) throw new ProviderError('Your Claude plan’s usage limit is reached.', 'usage_limit')
+        return fakeTeam(req)
+      })
+      const [id] = await createTasks([{ exec: 'sales', productId, task: 'Lent search limit test task', origin: 'cmo' }])
+      const nightId = await startNight('manual', { onlyProducts: [productId] })
+      nights.push(nightId)
+      const night = await waitFor(async () => {
+        const { data } = await db().from('nights').select('*').eq('id', nightId).single()
+        return data?.status !== 'running' ? data : null
+      }, 120_000)
+      const log = night.log as Array<{ step: string; status: string; detail?: string }>
+      expect(night.paused_reason).toBeNull()
+      expect(log.find(e => e.step.includes('Lent search limit test task'))).toMatchObject({ status: 'skipped', detail: expect.stringMatching(/usage limit.*just this step is skipped.*rest of the night goes on/) })
+      // The steps after it still ran: the execs' reports and the calendar.
+      expect(log.filter(e => / report · /.test(e.step) && e.status === 'done').length).toBeGreaterThan(0)
+      expect(log.find(e => e.step === 'Myra · your calendar')?.status).toBe('done')
+      // The task waits for the reset.
+      const { data: task } = await db().from('tasks').select('status').eq('id', id).single()
+      expect(task!.status).toBe('queued')
+      await db().from('tasks').delete().eq('id', id)
+    } finally {
+      if (before === undefined) delete process.env.MARKOS_MODEL_DEFAULT
+      else process.env.MARKOS_MODEL_DEFAULT = before
+    }
+  })
+})
+
+describe('the brief written when the real one can’t be', () => {
+  it('lists the steps that were skipped and never ran, not the waits that ended in a re-run', () => {
+    const brief = fallbackBrief([
+      { at: 't', step: 'Task · a web task', status: 'skipped', detail: 'Claude Code reached the Claude plan’s usage limit.' },
+      { at: 't', step: 'Marketing · A', status: 'skipped', detail: 'Usage limit — waiting until 03:00' },
+      { at: 't', step: 'Marketing · A', status: 'done' },
+      { at: 't', step: 'Report · B', status: 'failed', detail: 'boom' },
+    ], 'the brief couldn’t be written')
+    expect(brief.risks).toEqual(['Report · B: boom', 'Task · a web task: Claude Code reached the Claude plan’s usage limit.'])
+    expect(brief.overnight.map(o => o.summary)).toEqual(['Marketing · A'])
   })
 })
 

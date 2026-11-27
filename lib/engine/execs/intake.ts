@@ -1,8 +1,10 @@
 import { db } from '@/lib/db'
 import { CHARTER } from '../charter'
-import { generateObject, generateText } from '@/lib/llm'
+import { canReadFiles, generateObject, generateText, searchModelFor, unusableAi } from '@/lib/llm'
 import { IntakeSchema, type Intake } from '../schemas'
 import { applyModelSettings } from './context'
+import { repoDigestBlock } from './repo-digest'
+import { readPublicPage } from './public-page'
 import { CHIEF_OF_STAFF_RULES } from './roster'
 
 // Intake: the team learns a product from the product itself — its README,
@@ -28,27 +30,38 @@ export async function runIntake(productId: string, signal?: AbortSignal): Promis
   const ctx = { agent: 'intake' as const, productId, signal }
 
   let notes = ''
+  const readFiles = canReadFiles('intake')
   if (paths.length === 0) {
-    // No code on this Mac: read the public site instead, and say so.
-    const site = await generateText(ctx, {
+    // No code on this computer: read the public site instead, and say so. An AI that can browse
+    // does it; when none is set up, or the one that is can't be used (signed out, no billing),
+    // MarkOS fetches the product's own page itself.
+    const site = searchModelFor('intake') === null ? null : await generateText(ctx, {
       system: SYSTEM,
-      prompt: `There is no code for "${product.name}" on this Mac. Fetch ${product.url} and search the web for it. Write notes on what it is, who it's for, pricing and brand — only what pages state.`,
+      prompt: `There is no code for "${product.name}" on this computer. Fetch ${product.url} and search the web for it. Write notes on what it is, who it's for, pricing and brand — only what pages state.`,
       grounded: true,
       purpose: 'intake research',
+    }).catch((err: unknown) => {
+      if (!unusableAi(err)) throw err
+      return null
     })
-    notes = `NOTES FROM THE PUBLIC SITE (there is no repo on this Mac):\n${site.text}`
+    const page = site || !product.url ? null : await readPublicPage(product.url)
+    notes = site
+      ? `NOTES FROM THE PUBLIC SITE (there is no repo on this computer):\n${site.text}`
+      : page
+        ? `NOTES FROM THE PUBLIC SITE (there is no code on this computer; MarkOS fetched ${product.url} just now — only what the page states):\n${page}`
+        : 'There is no code on this computer and no website MarkOS could read. Work only from the founder’s description and leave the rest empty.'
   }
 
   const { data } = await generateObject(ctx, {
     system: SYSTEM,
     prompt: `Product: ${product.name}${product.url ? ` (${product.url})` : ''}
-${paths.length ? `Read its files under: ${paths.join(', ')}` : notes}
+${paths.length ? (readFiles ? `Read its files under: ${paths.join(', ')}` : await repoDigestBlock(paths)) : notes}
 ${product.description ? `The founder's own description: ${product.description}` : ''}
 
 Draft the product profile.`,
     schema: IntakeSchema,
     purpose: 'intake',
-    readPaths: paths,
+    readPaths: readFiles ? paths : [],
   })
 
   const { error: saveError } = await supabase.from('products').update({ intake: data, intake_status: 'draft' }).eq('id', productId)

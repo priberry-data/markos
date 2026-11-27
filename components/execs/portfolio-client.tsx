@@ -72,7 +72,7 @@ export function PortfolioCard({ p }: { p: PortfolioItem }) {
           <button className={tone.ghostBtn} disabled={busy !== null}
             onClick={() => act('paths', `/api/products/${p.id}`, 'PATCH', { repo_paths: paths.split('\n') }, 'Folders saved')}>Save</button>
         </div>
-        {p.repo_paths.length === 0 && <p className="text-xs text-mk-warn mt-1">No code on this Mac — the team will work from the public site and what you tell it.</p>}
+        {p.repo_paths.length === 0 && <p className="text-xs text-mk-warn mt-1">No code on this computer — the team will work from the public site and what you tell it.</p>}
       </div>
 
       <div className="flex flex-wrap gap-2">

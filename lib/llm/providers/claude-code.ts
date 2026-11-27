@@ -68,6 +68,7 @@ const EFFORT = { none: 'low', light: 'medium', deep: 'high' } as const
  * also skips gitignored files such as `.env.local` by default.
  */
 export const SECRET_FILE_GLOBS = ['**/.env*', '**/*.pem', '**/id_rsa*', '**/id_ed25519*'] as const
+export const MARKOS_PRIVATE_FILES = ['ai.json', 'local-token'] as const
 
 /**
  * A folder as Claude Code's permission rules write it. On Windows it matches paths in POSIX
@@ -116,6 +117,8 @@ export function buildArgs(req: ProviderRequest): string[] {
     const deny = [
       ...readPaths.flatMap(dir => SECRET_FILE_GLOBS.map(g => `Read(/${ruleDir(dir)}/${g})`)),
       ...SECRET_FILE_GLOBS.map(g => `Read(//${g})`),
+      // MarkOS's own keys (Settings → Your AI) and local token.
+      ...MARKOS_PRIVATE_FILES.map(f => `Read(/${ruleDir(join(/*turbopackIgnore: true*/ supportDir(), f))})`),
     ]
     args.push('--disallowedTools', deny.join(','))
   }

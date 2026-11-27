@@ -59,7 +59,7 @@ export async function repoFacts(path: string, since: Date): Promise<RepoFacts> {
 }
 
 export function renderRepoFacts(facts: RepoFacts[]): string {
-  if (facts.length === 0) return 'No code for this product on this Mac — say so rather than guessing what it does.'
+  if (facts.length === 0) return 'No code for this product on this computer — say so rather than guessing what it does.'
   return facts.map(f => !f.isGit ? `- ${f.path}: a folder, not a git repo` : [
     `- ${f.path}`,
     `  last commit: ${f.lastCommit ?? 'none'}`,

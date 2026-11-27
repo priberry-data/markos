@@ -103,6 +103,31 @@ jobs:
           node scripts/markos.mjs start
           node -e "fetch('http://localhost:3001/api/health').then(r=>r.json()).then(j=>{console.log(j);if(!j.ok)process.exit(1)})"
           node scripts/markos.mjs stop
+  local-ai:
+    # A real model, not a stub: Ollama with a small model on the CI machine. MarkOS talks to it
+    # through its own Ollama provider and through the OpenAI-compatible one (Ollama serves /v1 too).
+    name: a real local model (Ollama)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MARKOS_LIVE_OLLAMA: qwen2.5:0.5b
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: install Ollama and pull a small model
+        timeout-minutes: 10
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          curl -sf http://127.0.0.1:11434/api/tags >/dev/null || (nohup ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &)
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:11434/api/tags >/dev/null && break; sleep 1; done
+          ollama pull "$MARKOS_LIVE_OLLAMA"
+      - name: MarkOS works with it
+        timeout-minutes: 15
+        run: npx vitest run tests/llm/live-local.test.ts
   lint:
     runs-on: ubuntu-latest
     steps:

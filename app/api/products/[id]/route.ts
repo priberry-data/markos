@@ -1,7 +1,6 @@
-import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { checkRepoPaths } from '@/lib/utils/repo-paths'
 
 const TEXT = ['name', 'url', 'description', 'category', 'stage', 'target_audience', 'target_geography', 'currency',
   'competitors', 'already_tried', 'brand_voice', 'primary_color', 'secondary_color', 'logo_url'] as const
@@ -30,13 +29,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (Array.isArray(body.goals)) update.goals = body.goals.filter(g => typeof g === 'string' && g.trim())
   if (body.night_enabled !== undefined) update.night_enabled = Boolean(body.night_enabled)
   if (Array.isArray(body.repo_paths)) {
-    // Folders the execs may read. Must exist on this Mac; ~ is expanded.
-    const paths = body.repo_paths
-      .filter((x): x is string => typeof x === 'string' && x.trim() !== '')
-      .map(x => x.trim().replace(/^~(?=\/|$)/, homedir()).replace(/\/+$/, ''))
-    const missing = paths.filter(x => !x.startsWith('/') || !existsSync(x))
-    if (missing.length) return NextResponse.json({ error: `Not found on this Mac: ${missing.join(', ')}` }, { status: 400 })
-    update.repo_paths = [...new Set(paths)]
+    // Folders the execs may read: full paths to folders on this computer, written the way this
+    // system writes them (C:\Users\... on Windows); ~ is expanded.
+    const checked = checkRepoPaths(body.repo_paths)
+    if (!checked.ok) return NextResponse.json({ error: `Not a folder on this computer: ${checked.missing.join(', ')}` }, { status: 400 })
+    update.repo_paths = checked.paths
   }
 
   const { error } = await db().from('products').update(update).eq('id', id)

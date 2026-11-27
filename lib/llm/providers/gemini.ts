@@ -1,3 +1,4 @@
+import { geminiKey } from '../connection'
 import { Provider, ProviderError, ProviderRequest, ProviderResponse, Source } from '../types'
 
 // Google Gemini via the native generateContent endpoint.
@@ -45,7 +46,7 @@ function thinkingConfig(model: string, reasoning: ProviderRequest['reasoning']) 
 function classify(status: number, message: string): ProviderError {
   const m = message.toLowerCase()
   if (status === 400 && (m.includes('api key') || m.includes('api_key'))) {
-    return new ProviderError('The Gemini API key is invalid. Update GEMINI_API_KEY in .env.local.', 'auth', status)
+    return new ProviderError('The Gemini API key is invalid. Update it in Settings → Your AI.', 'auth', status)
   }
   if (status === 401 || status === 403) {
     return new ProviderError('Gemini rejected the API key or this key lacks access to the model.', 'auth', status)
@@ -130,12 +131,12 @@ interface GeminiCandidate {
 export const gemini: Provider = {
   id: 'gemini',
 
-  isConfigured: () => Boolean(process.env.GEMINI_API_KEY),
+  isConfigured: () => Boolean(geminiKey()),
 
   async call(req: ProviderRequest): Promise<ProviderResponse> {
-    const key = process.env.GEMINI_API_KEY
+    const key = geminiKey()
     if (!key) {
-      throw new ProviderError('GEMINI_API_KEY is not set in .env.local.', 'not_configured')
+      throw new ProviderError('No Gemini key yet. Add one in Settings → Your AI.', 'not_configured')
     }
     if (req.grounded && req.jsonSchema) {
       throw new ProviderError('Grounded search and a fixed JSON schema must be separate calls.', 'bad_request')
@@ -256,8 +257,8 @@ export const gemini: Provider = {
 
 /** Model ids this key can call with generateContent — to check configured ids still exist. */
 export async function listGeminiModels(): Promise<string[]> {
-  const key = process.env.GEMINI_API_KEY
-  if (!key) throw new ProviderError('GEMINI_API_KEY is not set in .env.local.', 'not_configured')
+  const key = geminiKey()
+  if (!key) throw new ProviderError('No Gemini key yet. Add one in Settings → Your AI.', 'not_configured')
   const ids: string[] = []
   let pageToken = ''
   for (let i = 0; i < 10; i++) {

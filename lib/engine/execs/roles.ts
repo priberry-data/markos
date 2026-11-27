@@ -41,7 +41,7 @@ export const ROLES: Role[] = [
   {
     key: 'ea', name: 'Myra', title: 'Executive Assistant', reportsTo: 'You', group: 'office',
     purpose: 'Guards your time and makes sure everything agreed happens on time.',
-    duties: ['Book meetings only when something needs you — inside your meeting windows, under your daily limit', 'Write each meeting’s agenda and pre-read', 'Put meetings on your Mac Calendar (with a 10-minute reminder)', 'Write minutes when a meeting ends; turn every action item into a dated task', 'Track your own to-dos and what’s overdue', 'Book a weekly staff meeting early each week'],
+    duties: ['Book meetings only when something needs you — inside your meeting windows, under your daily limit', 'Write each meeting’s agenda and pre-read', 'On a Mac, put meetings on your Calendar app (with a 10-minute reminder)', 'Write minutes when a meeting ends; turn every action item into a dated task', 'Track your own to-dos and what’s overdue', 'Book a weekly staff meeting early each week'],
     when: 'Every night after the reports, and whenever you ask for a meeting.',
     decidesAlone: ['When meetings happen (within your rules)', 'Agendas, minutes, reminders'],
     needsYou: ['Rescheduling outside your windows', 'Anything that would exceed your daily meeting limit — it goes in the brief instead'],
@@ -171,7 +171,7 @@ export const CAPABILITIES: Record<string, { tools: string[]; actions: string[] }
     actions: ['Route your instructions to the right execs', 'Pick who answers you in the team room', 'Write the morning brief'],
   },
   ea: {
-    tools: ['Your calendar rules', 'Every exec’s latest report', 'Mac Calendar'],
+    tools: ['Your calendar rules', 'Every exec’s latest report', 'Calendar app (on a Mac)'],
     actions: ['Book, reschedule and cancel meetings', 'Write agendas, pre-reads and minutes', 'Turn action items into dated tasks', 'Track your to-dos'],
   },
   cmo: { tools: ['Live web search', 'The marketing team (10 agents)'], actions: ['Run marketing agents', 'Take on tasks', 'Hand work to teammates', 'Ask teammates', 'Ask Myra for a meeting', 'Draft posts for your approval'] },

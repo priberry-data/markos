@@ -1,11 +1,12 @@
 import { db } from '@/lib/db'
+import { teamDefault } from '@/lib/llm/models'
 import { ProviderError } from '@/lib/llm/types'
 import { startJob } from '@/lib/utils/jobs'
 import { describeFailure, startAgentRun, startLaunch } from '../orchestrator'
 import { notify } from '../store'
 import type { ExecKey, MorningBrief } from '../schemas'
 import { writeBrief } from './chief-of-staff'
-import { portfolio, type PortfolioProduct } from './context'
+import { applyModelSettings, portfolio, type PortfolioProduct } from './context'
 import { runIntake } from './intake'
 import { writeReport } from './report'
 import { createTasks, executeTask } from './tasks'
@@ -77,6 +78,17 @@ export async function runNight(nightId: string, signal: AbortSignal, opts: { onl
         return
       } catch (err) {
         if (err instanceof ProviderError && err.kind === 'usage_limit') {
+          // Only Claude Code has a plan limit. When the team runs on another AI, Claude Code was only
+          // lent its web searches (or an agent set apart on it): the rest of the night needs neither,
+          // so just this step is skipped (a queued task stays in the queue) and the night goes on.
+          await applyModelSettings()
+          const team = teamDefault()
+          if (team && team.provider !== 'claude-code') {
+            const when = err.resetAt ? ` (it resets at ${err.resetAt.toLocaleTimeString()})` : ''
+            log.push({ at: new Date().toISOString(), step: name, status: 'skipped', detail: `Claude Code reached the Claude plan’s usage limit${when}. This team runs on another AI, so just this step is skipped (an instruction you queued stays queued for the next run); the rest of the night goes on.` })
+            await save()
+            return
+          }
           const reset = err.resetAt
           const morning = new Date(); morning.setHours(MORNING_HOUR, 0, 0, 0)
           if (reset && reset < morning && reset > new Date()) {
@@ -313,6 +325,8 @@ function sleepUntil(at: number, signal: AbortSignal) {
 /** When even the brief can't be written (e.g. the usage limit), the founder still gets the facts. */
 export function fallbackBrief(log: LogEntry[], reason: string): MorningBrief {
   const done = log.filter(l => l.status === 'done')
+  // A step whose last entry is 'skipped' never ran (a wait that ended in a re-run has a later entry).
+  const skipped = [...new Map(log.map(l => [l.step, l])).values()].filter(l => l.status === 'skipped')
   return {
     headline: `The night shift was cut short: ${reason}`,
     the_one_thing: { product: null, focus: 'Fix what stopped the night shift', why: reason },
@@ -320,7 +334,10 @@ export function fallbackBrief(log: LogEntry[], reason: string): MorningBrief {
     top_decisions: [],
     overnight: done.slice(-12).map(l => ({ product: null, summary: `${l.step}${l.detail ? ` — ${l.detail}` : ''}` })),
     per_product: [],
-    risks: log.filter(l => l.status === 'failed').map(l => `${l.step}: ${l.detail ?? 'failed'}`),
+    risks: [
+      ...log.filter(l => l.status === 'failed').map(l => `${l.step}: ${l.detail ?? 'failed'}`),
+      ...skipped.map(l => `${l.step}: ${l.detail ?? 'skipped'}`),
+    ],
     today_focus: ['Open the exec reports below for what did finish.'],
   }
 }

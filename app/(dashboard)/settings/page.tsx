@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
-import { claudeBinary } from '@/lib/llm/providers/claude-code'
 import { getActiveProduct } from '@/lib/products/active'
-import { AGENTS, AGENT_KEYS, MODEL_CHOICES, modelFor, refToString, setModelOverrides, type AgentKey } from '@/lib/llm/models'
+import { AGENTS, AGENT_KEYS, MODEL_CHOICES, OPEN_PROVIDERS, modelFor, refToString, setModelOverrides, type AgentKey } from '@/lib/llm/models'
+import { aiStatus, modelLabel } from '@/lib/llm/ai-status'
 import { Settings } from 'lucide-react'
 import { Card, PageHeader, SectionTitle } from '@/components/engine/ui'
 import { WorkingDay } from '@/components/execs/office-client'
@@ -22,6 +22,14 @@ export default async function SettingsPage() {
   ])
   setModelOverrides((profile?.agent_models ?? {}) as Partial<Record<AgentKey, string>>)
 
+  const team = modelFor('chief_of_staff')
+  // Every model in use shows in the per-agent lists, plus the team's own AI.
+  const extra = [team, ...AGENT_KEYS.map(k => modelFor(k))].filter(r => OPEN_PROVIDERS.includes(r.provider))
+  const models = [
+    ...MODEL_CHOICES.map(m => ({ value: refToString(m.ref), label: m.label, note: m.note })),
+    ...[...new Set(extra.map(refToString))].map(v => ({ value: v, label: modelLabel(extra.find(r => refToString(r) === v)!), note: '' })),
+  ]
+
   return (
     <div className="p-8 max-w-3xl">
       <PageHeader icon={Settings} title="Settings" />
@@ -36,12 +44,10 @@ export default async function SettingsPage() {
       </Card>
       <SettingsClient
         profile={{ name: profile?.name ?? '', role: profile?.role ?? '', company: profile?.company ?? '', sender_email: profile?.sender_email ?? '', run_budget_usd: Number(profile?.run_budget_usd ?? 1) }}
-        providers={{
-          claudeCode: claudeBinary() !== null, gemini: Boolean(process.env.GEMINI_API_KEY), anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-          resend: Boolean(process.env.RESEND_API_KEY), resendFrom: Boolean(process.env.RESEND_FROM_EMAIL),
-        }}
+        providers={{ resend: Boolean(process.env.RESEND_API_KEY), resendFrom: Boolean(process.env.RESEND_FROM_EMAIL) }}
+        ai={aiStatus()}
         agents={AGENT_KEYS.filter(k => k !== 'assistant').map(k => ({ key: k, name: AGENTS[k].name, title: AGENTS[k].title, current: refToString(modelFor(k)) }))}
-        models={MODEL_CHOICES.map(m => ({ value: refToString(m.ref), label: m.label, note: m.note }))}
+        models={models}
         product={product ? { id: product.id, name: product.name } : null}
         rules={(rules ?? []) as Array<{ id: string; rule: string; origin: string }>}
         connected={(tokens ?? []) as Array<{ platform: string; username: string | null }>}

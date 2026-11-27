@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs'
 import path from 'node:path'
 import { db } from '@/lib/db'
 import { setModelOverrides, type AgentKey } from '@/lib/llm/models'
@@ -6,6 +7,7 @@ import { loadBrain, renderBrief, type ProductRow } from '../brain'
 import { normalizeUrl } from '../sources'
 import { knownSources } from '../store'
 import type { ExecKey } from '../schemas'
+import { isSecretFile } from './repo-digest'
 
 export type PortfolioProduct = Pick<ProductRow, 'id' | 'name' | 'url' | 'description'> & {
   repo_paths: string[]
@@ -27,7 +29,7 @@ export function renderPortfolio(products: PortfolioProduct[]): string {
   const byId = new Map(products.map(p => [p.id, p]))
   return products.map(p => {
     const parent = p.parent_id ? byId.get(p.parent_id)?.name : null
-    return `- ${p.name}${parent ? ` (part of ${parent})` : ''}: ${p.description ?? 'no description yet'}${p.repo_paths.length ? '' : ' [no code on this Mac]'}`
+    return `- ${p.name}${parent ? ` (part of ${parent})` : ''}: ${p.description ?? 'no description yet'}${p.repo_paths.length ? '' : ' [no code on this computer]'}`
   }).join('\n')
 }
 
@@ -62,12 +64,31 @@ function insideFolder(file: string, folder: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
-/** A cited source is kept only if it's a retrieved page or a file inside a folder the exec could read. */
+/** "src/a.ts:12", "src/a.ts:3-9" or "src/a.ts#L12" cite lines; the file itself is what must exist. */
+const withoutLine = (value: string) => value.trim().replace(/#L\d+.*$/, '').replace(/(:\d+(-\d+)?)+$/, '')
+
+/** A real file (not a folder) inside a folder the exec could read, and never a secret file: no exec may read those. */
+function readableFile(file: string, readPaths: string[]): boolean {
+  if (!readPaths.some(p => insideFolder(file, p)) || isSecretFile(file)) return false
+  try {
+    return statSync(file).isFile()
+  } catch {
+    return false
+  }
+}
+
+/** A cited source is kept only if it's a retrieved page, or a real file inside a folder the exec could read. */
 export function citationOk(value: string | null, known: Source[], readPaths: string[]): boolean {
   if (!value) return false
   // A file path, on any system (/repo/x on Mac and Linux, C:\repo\x on Windows): it must sit inside
   // a folder the exec could read, not merely start with the same letters (/repo2 isn't in /repo).
-  if (path.isAbsolute(value)) return readPaths.some(p => insideFolder(value, p))
+  if (path.isAbsolute(value.trim())) return readableFile(withoutLine(value), readPaths)
+  // Or a path relative to one of those folders ("src/a.ts:12"): the code digest lists files that
+  // way for an AI that can't open them. Anything with a scheme is a URL, checked as a source.
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(value.trim())) {
+    const rel = withoutLine(value)
+    if (rel && readPaths.some(p => readableFile(path.resolve(/*turbopackIgnore: true*/ p, rel), readPaths))) return true
+  }
   const norm = normalizeUrl(value)
   return known.some(s => normalizeUrl(s.url) === norm)
 }

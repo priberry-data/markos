@@ -24,6 +24,11 @@ describe('local guard', () => {
 
   it('refuses changes posted from another website', () => {
     expect(checkLocalRequest(req({ origin: 'https://evil.example' }), TOKEN).ok).toBe(false)
+    // A page served by another program on this computer is another website too: same name, other port.
+    expect(checkLocalRequest(req({ origin: 'http://localhost:5173' }), TOKEN).ok).toBe(false)
+    expect(checkLocalRequest(req({ host: '127.0.0.1:3001', origin: 'http://127.0.0.1:8080' }), TOKEN).ok).toBe(false)
+    expect(checkLocalRequest(req({ origin: 'http://localhost' }), TOKEN).ok).toBe(false)
+    expect(checkLocalRequest(req({ origin: 'http://127.0.0.1:3001' }), TOKEN).ok).toBe(false) // the window at localhost never sends this
     // A form posted cross-site with the Origin stripped is still marked by the browser.
     expect(checkLocalRequest(req({ secFetchSite: 'cross-site' }), TOKEN).ok).toBe(false)
     expect(checkLocalRequest(req({ secFetchSite: 'same-site' }), TOKEN).ok).toBe(false)

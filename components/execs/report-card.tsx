@@ -52,7 +52,7 @@ export function ReportCard({ product, report, at, open = false }: { product: str
               {report.risks.map((r, i) => (
                 <p key={i} className="mt-1 text-mk-body">
                   <Pill color={r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'amber' : 'default'}>{r.severity}</Pill> {r.risk}
-                  {r.source?.startsWith('http') ? <Cite url={r.source} /> : r.source ? <span className="text-[11px] text-mk-muted ml-2">{r.source}</span> : null}
+                  {/^https?:\/\//i.test(r.source ?? '') ? <Cite url={r.source!} /> : r.source ? <span className="text-[11px] text-mk-muted ml-2">{r.source}</span> : null}
                 </p>
               ))}
             </div>

@@ -11,8 +11,10 @@ Under the CMO sits a marketing team that researches the live web, drafts a strat
 **you approve**, writes your content, finds where your audience is, and reviews its
 own work before you see it.
 
-Single-user and local-only: no login, no cloud database, nothing deployed. The AI
-runs on **your Claude plan through Claude Code**, with no API key and no per-call bill.
+Single-user and local-only: no login, no cloud database, nothing deployed. **You choose the
+AI**: your Claude plan through Claude Code (the default, with no API key and no per-call bill),
+an API key from Gemini, OpenAI, OpenRouter, Groq, DeepSeek, Mistral and others, or a free model
+on your own computer with Ollama or LM Studio. See [Choosing your AI](#choosing-your-ai).
 
 ## What it is
 
@@ -23,22 +25,30 @@ nothing is posted or sent without your click.
 ## Requirements
 
 MarkOS runs on **Mac, Windows and Linux**. On every change, [CI](.github/workflows/ci.yml)
-installs it from scratch on Windows x64 and Linux (x64 and arm64), with the one-line installers
+installs it from scratch on Windows x64, Linux (x64 and arm64) and an Intel Mac, with the one-line installers
 too, starts the server, checks its pages, backs up, runs a night shift and schedules it, and runs
-the full test suite. The Mac is tested by hand on Apple silicon (the same steps and the full
-suite) and in CI when GitHub has a Mac runner free. MarkOS has been used day to day on a Mac.
+the full test suite. Apple-silicon Macs get the same run weekly (GitHub's arm64 Macs are often
+at capacity) and by hand before releases. MarkOS has been used day to day on a Mac.
+
+CI also runs MarkOS against a real model on the CI machine (Ollama with a small model), through
+both its Ollama connection and its OpenAI-compatible one.
 
 What CI can't cover: a real Windows or Linux desktop (the window and shortcut are checked, not
-clicked), and real Claude Code on Windows or Linux (CI machines aren't signed in to a Claude
-plan, so agents there run on a stand-in). If anything fails on your machine, please
+clicked), real Claude Code on Windows or Linux (CI machines aren't signed in to a Claude
+plan, so agents there run on a stand-in), and the hosted APIs (OpenAI, OpenRouter, Groq and the
+rest need keys, so they're checked against stubs of the OpenAI chat-completions format and
+OpenRouter's documented search format, not live). If anything fails on your machine, please
 [open an issue](https://github.com/priberry-data/markos/issues).
 
-- **Mac** (Apple silicon; Intel Macs should work but aren't in CI), **Windows 10 or 11** (x64), or **Linux** (x64 or arm64)
+- **Mac** (Apple silicon or Intel), **Windows 10 or 11** (x64), or **Linux** (x64 or arm64)
 - Node 22 or newer (`node --version`), from [nodejs.org](https://nodejs.org) or your package manager
-- Claude Code, signed in to your Claude plan. The agents run on your plan, so there's no per-call bill.
-  - Mac or Linux: `curl -fsSL https://claude.ai/install.sh | bash`
-  - Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`
-  - then run `claude` and type `/login`
+- An AI for the team, any one of these (you pick it in Settings → Your AI after installing):
+  - **Claude Code**, signed in to your Claude plan: no per-call bill.
+    Mac or Linux: `curl -fsSL https://claude.ai/install.sh | bash` · Windows (PowerShell):
+    `irm https://claude.ai/install.ps1 | iex` · then run `claude` and type `/login`
+  - **an API key**: Gemini, OpenRouter, OpenAI, Groq, DeepSeek, Mistral, Together, xAI, the
+    Anthropic API, or any OpenAI-compatible server
+  - **a free model on your computer**: [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai)
 
 That's all. No Docker. `node scripts/markos.mjs doctor` checks it before you start.
 
@@ -114,8 +124,9 @@ install's secret it comes up on keys that match nothing.
 
 ## First run
 
-1. Settings → **Test AI connection** checks that Claude Code is signed in and that a live web
-   search returns sources.
+1. Settings → **Your AI**: pick the AI your team runs on. **Test AI connection** then checks that
+   it answers, that every model you picked exists, and that a live web search returns sources
+   (or tells you web search is off).
 2. **Products**: add each product, point it at its repo folder, press *Read the product*, and
    confirm what the team read. Where the repo contradicts itself, both versions are listed and
    nothing is guessed.
@@ -125,7 +136,52 @@ install's secret it comes up on keys that match nothing.
 4. Optional, in `.env.local`:
    - `RESEND_API_KEY` + `RESEND_FROM_EMAIL` to send outreach you approve
    - your own X / LinkedIn app keys, then connect them in Settings so approved posts go out on time
-   - `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` to run particular agents on those APIs instead
+   - `GEMINI_API_KEY` / `ANTHROPIC_API_KEY`, if you'd rather keep those keys here than in
+     Settings (these win over Settings)
+
+## Choosing your AI
+
+Settings → **Your AI** puts the whole team on one AI in a click; the Models list below it can set
+any single agent apart. Keys you enter there are saved in MarkOS's own folder on your computer
+(`ai.json`, readable only by you), never in the database, never shown again.
+
+| AI | Cost | Web search | Your code |
+|---|---|---|---|
+| **Claude Code** (default) | your Claude plan, no per-call bill | yes | opens files itself, read-only |
+| **Gemini** | free tier, then per call | yes, with billing on (5,000 searches a month free) | a digest MarkOS reads |
+| **Anthropic API** | per call | yes (Sonnet 5, Opus 5) | a digest MarkOS reads |
+| **OpenRouter** | per call; some models free | yes | a digest MarkOS reads |
+| **OpenAI, Groq, DeepSeek, Mistral, Together, xAI**, any OpenAI-compatible server | per call | no ¹ | a digest MarkOS reads |
+| **Ollama, LM Studio** | free, runs on your computer | no ¹ | a digest MarkOS reads |
+
+¹ An AI that can't search is never asked to pretend. If Claude Code, a Gemini key with billing on
+or an Anthropic API key is also set up, web searches go there, in that order (a team running on
+OpenRouter searches on OpenRouter itself). If one can't be used (not signed in, no billing), the
+next takes over. A team on your Claude plan only ever searches on Claude Code, so nothing moves
+onto a per-call bill. A plan's usage limit stops a search there rather than moving it elsewhere:
+a launch stops (start it again after the reset), a queued task waits for the next night shift,
+and the night shift waits for a reset that comes before morning; on a team running on another AI,
+which only borrows Claude Code to search, the rest of the night goes on. If none can search,
+research agents stop and say web search is needed, and other agents carry on without the web,
+listing what needs checking instead of citing pages (a task whose web search couldn't run says so
+in its summary).
+
+**Your code, without Claude Code.** Only Claude Code is trusted to open files, and only with
+read-only tools. Every other AI gets text in and text out, never a tool that touches your
+computer (Gemini, the Anthropic API and OpenRouter run web searches on their own servers):
+MarkOS itself reads the list of files git shows (the ones it tracks, plus new ones it doesn't
+ignore), the README and the project files (`package.json` and the like), skips `.env*`, keys,
+links and anything named like a secret, and puts that digest in the prompt.
+
+**Local models.** Ollama is used through its own API so each call gets a context window big
+enough for MarkOS's long prompts (its OpenAI endpoint can't set that, and Ollama's default
+window, 4k tokens on most laptops, would cut them off). Ollama is told to refuse a prompt rather
+than cut it short; on a model with a small window, the answer gets what the prompt leaves. Small models (under about 7B) often get the fixed formats wrong; MarkOS checks
+every answer, asks once for a fix, and otherwise fails clearly rather than saving half an answer.
+
+**Cost.** MarkOS counts what Gemini, Anthropic API and OpenRouter calls cost, and local models
+cost nothing. For other API keys it can't see prices, so the per-run and nightly caps can't stop
+them: set a spending limit with that provider.
 
 ## Finding your way
 
@@ -155,7 +211,11 @@ enforces them.
 | One call never gets both the web and your files, so a web page can't steer an agent into leaking a file. | `tests/llm/claude-code.test.ts` "never gives one call both the web and files" |
 | File-reading calls are denied `.env*`, `*.pem` and SSH keys, in every folder they may read and everywhere else. Checked against real Claude Code on a Mac; on Windows the rules use Claude Code's documented path form (`/c/...`), not yet checked against real Claude Code there. | `tests/llm/claude-code.test.ts` "denies reading secret files" |
 | An `ANTHROPIC_API_KEY` in your environment never quietly moves billing off your plan. | `tests/llm/claude-code.test.ts` "never lets an API key switch billing" |
-| The server answers only this computer. Other websites, and pages whose domain points at 127.0.0.1, can't change anything. Scripts need a local token. | `tests/utils/local-guard.test.ts` |
+| Every AI other than Claude Code gets no tool that touches your computer: text in, text out (a web search, where the AI does one, runs on the provider's servers). For them MarkOS reads a digest of your code itself, which never lists or reads `.env*`, keys or secret-named files, never follows a link, and never reads anything git ignores, even when the product folder is inside a bigger repository. | `tests/engine/repo-digest.test.ts`, `tests/llm/openai-compat.test.ts`, `tests/llm/gemini.test.ts`, `tests/llm/anthropic.test.ts` |
+| An AI that can't search the web is never asked to: searches go to one that can, or the agent says it had none. A team on your Claude plan never has its searches moved onto a per-call API bill. | `tests/llm/routing.test.ts`, `tests/engine/execs.test.ts` "goes on without the web, and says why" |
+| A cited file must be a real file inside a folder the agent could read (a full path, or one relative to that folder, as the code digest lists them), and never a secret file. | `tests/engine/citation.test.ts` |
+| API keys entered in Settings are saved readable only by you, in MarkOS's own folder, and never sent back to the browser. | `tests/llm/openai-compat.test.ts` "the saved connection" |
+| The server answers only this computer. Other websites (a page another program serves on this computer included), and pages whose domain points at 127.0.0.1, can't change anything. Scripts need a local token. | `tests/utils/local-guard.test.ts` |
 | The database gives nothing to a request with no key or the anon key, so a web page can't read it through 127.0.0.1. | `tests/engine/db-access.test.ts` |
 | Every agent prompt carries the chain of command. | `tests/engine/team.test.ts` "no agent prompt in the engine is written without it" |
 
@@ -229,7 +289,9 @@ each exec proposes **moves**. See Team & skills.
 **What runs on its own, and what waits for you.** Internal work runs without you:
 research, plans, drafts, revisions, reports, and work one exec hands to another (one
 hop only, never a chain). Anything public waits for your one-tap OK:
-- approving a post is your OK to publish it at its scheduled time
+- approving a post is your OK to publish it at its scheduled time; if the AI rewrites it
+  after that (or you restore an earlier version), it waits for your OK again, while your
+  own edits keep it
 - an email or pitch goes out only when you press Send, to an address you confirmed
 
 **The night shift** reads any new product, works your queued instructions first,
@@ -239,6 +301,9 @@ collects every exec's report, and then writes the brief. It fits a Claude plan:
 - if the plan's usage limit resets before morning, the shift waits for the reset and
   carries on
 - otherwise it stops, and the brief says what didn't happen
+- on a team running on another AI, which only borrows Claude Code to search, a usage limit
+  skips just the steps that needed it (an instruction you queued stays queued for the next
+  run); the rest of the night goes on
 
 ## How a launch works
 
@@ -287,7 +352,8 @@ REX research ──► SAGE strategy ──► you approve / edit / ask for a re
   and a configured sender.
 - **Usage is visible and capped.** Every AI call is recorded (`llm_calls`). Each run and
   each night has a cap (Settings), measured as API-equivalent value. On Claude Code
-  nothing is billed per call.
+  nothing is billed per call, and local models cost nothing. For API keys MarkOS can't
+  price (all but Gemini, the Anthropic API and OpenRouter), set a limit with the provider.
 - **Numbers are real or blank.** Exec reports take numbers only from facts gathered by
   code (git, the database) or that you entered. A number with no basis is removed.
 
@@ -306,7 +372,7 @@ node scripts/markos.mjs night                      # a night shift now, the way 
 ```
 
 ```
-lib/llm/            provider-neutral AI layer (Claude Code default; Gemini, Anthropic API optional), ledger, caps
+lib/llm/            provider-neutral AI layer (Claude Code default; Gemini, Anthropic API, any OpenAI-compatible API, Ollama), ledger, caps
 lib/engine/         brain (shared brief), agents, ARIA review, orchestrator, items, LYRA, schemas
 lib/engine/execs/   the executive team: roster, facts, reports, tasks, Chief of Staff, intake, night shift
 lib/social/         posting approved content to X / LinkedIn

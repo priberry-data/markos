@@ -34,7 +34,7 @@ export function DataConnections({ conns }: { conns: Array<{ name: string; envVar
           <li>In Supabase → Connect, copy the <b>session pooler</b> connection string, and put <code>markos_reader</code> and your password into it.</li>
           <li>Add it to <code>.env.local</code> in MarkOS as the variable shown above, e.g. <code>DATA_URL_ACME_PAYROLL=postgresql://…</code>, then reopen MarkOS.</li>
         </ol>
-        <p className={`${tone.muted} mt-3`}>Three locks keep it read-only: the login itself, a check on every query before it runs, and a read-only transaction. The password stays on this Mac — never in git or the backups.</p>
+        <p className={`${tone.muted} mt-3`}>Three locks keep it read-only: the login itself, a check on every query before it runs, and a read-only transaction. The password stays on this computer — never in git or the backups.</p>
       </details>
     </Card>
   )

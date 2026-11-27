@@ -3,10 +3,13 @@ import type { ModelRef, ProviderId } from './types'
 // Which model each agent uses. Claude Code by default: it runs on the
 // founder's own Claude subscription, so there is no API key and no per-call
 // bill, and it brings web search and read-only access to the product repos.
-// Any agent can be switched to Gemini or the Anthropic API in Settings.
+// Settings → Your AI switches the whole team (or one agent) to Gemini, the
+// Anthropic API, any OpenAI-compatible API (OpenAI, OpenRouter, Groq, DeepSeek,
+// Mistral, LM Studio...) or a free local model through Ollama.
 //
-// Resolution order: Settings override (profiles.agent_models) → env var
-// MARKOS_MODEL_<AGENT> (e.g. "gemini:gemini-3.8-flash") → default below.
+// Resolution order: Settings override for the agent (profiles.agent_models) →
+// env var MARKOS_MODEL_<AGENT> (e.g. "gemini:gemini-3.8-flash") → the team-wide
+// choice from Settings (agent_models._default) → MARKOS_MODEL_DEFAULT → default below.
 
 export type AgentKey =
   | 'research' | 'strategy' | 'content' | 'search' | 'distribution' | 'creative'
@@ -104,10 +107,10 @@ export const MODEL_CHOICES: Array<{ ref: ModelRef; label: string; note: string }
   { ref: sonnet, label: 'Claude Sonnet (Claude Code)', note: 'Default. On your Claude plan — no API key, web search and repo reading.' },
   { ref: opus, label: 'Claude Opus (Claude Code)', note: 'Deepest thinking. Uses your plan’s limits faster.' },
   { ref: { provider: 'claude-code', model: 'haiku' }, label: 'Claude Haiku (Claude Code)', note: 'Fastest and lightest on your limits. Fine for simple work.' },
-  { ref: { provider: 'gemini', model: GEMINI_FLASH }, label: 'Gemini 3.8 Flash', note: 'Needs GEMINI_API_KEY. Cheap, with live Google Search.' },
+  { ref: { provider: 'gemini', model: GEMINI_FLASH }, label: 'Gemini 3.8 Flash', note: 'Needs a Gemini key. Cheap; live Google Search needs billing on.' },
   { ref: { provider: 'gemini', model: GEMINI_FLASH_LITE }, label: 'Gemini 3.5 Flash-Lite', note: 'Cheaper. Used for reshaping text into a fixed format.' },
   { ref: { provider: 'gemini', model: GEMINI_FLASH_LITE_CHEAP }, label: 'Gemini 3.1 Flash-Lite', note: 'Cheapest. Fine for simple work.' },
-  { ref: { provider: 'anthropic', model: 'claude-sonnet-5' }, label: 'Claude Sonnet 5 (Anthropic API)', note: 'Billed per call. Needs ANTHROPIC_API_KEY with credit.' },
+  { ref: { provider: 'anthropic', model: 'claude-sonnet-5' }, label: 'Claude Sonnet 5 (Anthropic API)', note: 'Billed per call. Needs an Anthropic API key with credit.' },
   { ref: { provider: 'anthropic', model: 'claude-opus-5-5' }, label: 'Claude Opus 5.5 (Anthropic API)', note: 'Billed per call, highest cost.' },
 ]
 
@@ -119,15 +122,33 @@ export function parseRef(value: unknown): ModelRef | null {
   if (typeof value !== 'string') return null
   const [provider, ...rest] = value.split(':')
   const model = rest.join(':')
-  if (!model || !['claude-code', 'gemini', 'anthropic', 'fake'].includes(provider)) return null
+  if (!model || !PROVIDER_IDS.includes(provider as ProviderId)) return null
   return { provider: provider as ProviderId, model }
 }
 
+export const PROVIDER_IDS: ProviderId[] = ['claude-code', 'gemini', 'anthropic', 'openai-compat', 'ollama', 'fake']
+
+/** Providers whose model ids are whatever the founder's server offers. */
+export const OPEN_PROVIDERS: ProviderId[] = ['openai-compat', 'ollama']
+
+/** A model id typed into Settings for an open provider: no spaces or control characters. */
+export const validModelId = (id: unknown): id is string => typeof id === 'string' && /^[\w.:/@+-]{1,200}$/.test(id)
+
+/** May Settings save this ref? Known choices, or any sane model id on an open provider. */
+export function allowedRef(value: unknown): boolean {
+  if (MODEL_CHOICES.some(m => refToString(m.ref) === value)) return true
+  const ref = parseRef(value)
+  return !!ref && OPEN_PROVIDERS.includes(ref.provider) && validModelId(ref.model)
+}
+
+/** The key in profiles.agent_models that holds the team-wide choice. */
+export const DEFAULT_KEY = '_default'
+
 // Set once per run from profiles.agent_models. MarkOS is single-user, so a
 // module-level value is enough.
-let overrides: Partial<Record<AgentKey, string>> = {}
+let overrides: Partial<Record<AgentKey | typeof DEFAULT_KEY, string>> = {}
 
-export function setModelOverrides(next: Partial<Record<AgentKey, string>> | null | undefined) {
+export function setModelOverrides(next: Partial<Record<AgentKey | typeof DEFAULT_KEY, string>> | null | undefined) {
   overrides = next ?? {}
 }
 
@@ -145,9 +166,15 @@ export function modelFor(agent: AgentKey): ModelRef {
     forced() ??
     parseRef(overrides[agent]) ??
     parseRef(process.env[`MARKOS_MODEL_${agent.toUpperCase()}`]) ??
+    parseRef(overrides[DEFAULT_KEY]) ??
     parseRef(process.env.MARKOS_MODEL_DEFAULT) ??
     AGENTS[agent].model
   )
+}
+
+/** The team-wide choice from Settings, if any. */
+export function teamDefault(): ModelRef | null {
+  return parseRef(overrides[DEFAULT_KEY]) ?? parseRef(process.env.MARKOS_MODEL_DEFAULT)
 }
 
 /**
@@ -161,5 +188,6 @@ export function shapeModelFor(agent: AgentKey): ModelRef {
   if (main.provider === 'claude-code') return CLAUDE_CODE_SHAPE_MODEL
   if (main.provider === 'gemini') return SHAPE_MODEL
   if (main.provider === 'anthropic') return { provider: 'anthropic', model: 'claude-haiku-4-5' }
+  // OpenAI-compatible and local models: the founder picked one model, so it does both jobs.
   return main
 }

@@ -20,7 +20,7 @@ export default async function MeetingsPage() {
   return (
     <div className="p-8 max-w-4xl space-y-6">
       <PageHeader icon={CalendarDays} title="Meetings"
-        subtitle="Myra books time with the team only when something needs you, inside your meeting windows, and puts it on your Mac Calendar." />
+        subtitle="Myra books time with the team only when something needs you, inside your meeting windows, and on a Mac puts it on your Calendar app too." />
       <Card><SectionTitle>Ask Myra for a meeting</SectionTitle><BookMeeting /></Card>
 
       <Card>

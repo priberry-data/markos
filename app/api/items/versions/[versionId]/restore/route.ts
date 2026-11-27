@@ -4,8 +4,7 @@ import { restoreVersion } from '@/lib/engine/items'
 export async function POST(_req: Request, { params }: { params: Promise<{ versionId: string }> }) {
   const { versionId } = await params
   try {
-    await restoreVersion(versionId)
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, ...(await restoreVersion(versionId)) })
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 })
   }

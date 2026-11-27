@@ -1,20 +1,22 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { anthropicKey } from '../connection'
 import { Provider, ProviderError, ProviderRequest, ProviderResponse, Source } from '../types'
 
-// Claude, kept as an option per agent (Settings). Gemini is the default because
-// of cost.
+// Claude through the Anthropic API, billed per call. An option per agent (Settings).
 
-let client: Anthropic | null = null
+let client: { key: string; sdk: Anthropic } | null = null
 function getClient(): Anthropic {
   // SDK retries are off: the AI layer owns retry policy for every provider.
-  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 })
-  return client
+  // Rebuilt when the key changes in Settings.
+  const key = anthropicKey()
+  if (!client || client.key !== key) client = { key, sdk: new Anthropic({ apiKey: key, maxRetries: 0 }) }
+  return client.sdk
 }
 
 function classify(err: unknown): ProviderError {
   if (err instanceof Anthropic.APIUserAbortError) return new ProviderError('Cancelled.', 'aborted')
   if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-    return new ProviderError('The Anthropic API key is invalid. Update ANTHROPIC_API_KEY in .env.local.', 'auth', 401)
+    return new ProviderError('The Anthropic API key is invalid. Update it in Settings → Your AI.', 'auth', 401)
   }
   if (err instanceof Anthropic.RateLimitError) return new ProviderError('Claude rate limit hit.', 'rate_limit', 429)
   if (err instanceof Anthropic.BadRequestError) {
@@ -44,11 +46,11 @@ function supportsWebSearch(model: string) {
 export const anthropic: Provider = {
   id: 'anthropic',
 
-  isConfigured: () => Boolean(process.env.ANTHROPIC_API_KEY),
+  isConfigured: () => Boolean(anthropicKey()),
 
   async call(req: ProviderRequest): Promise<ProviderResponse> {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new ProviderError('ANTHROPIC_API_KEY is not set in .env.local.', 'not_configured')
+    if (!anthropicKey()) {
+      throw new ProviderError('No Anthropic API key yet. Add one in Settings → Your AI.', 'not_configured')
     }
     if (req.grounded && !supportsWebSearch(req.model)) {
       throw new ProviderError(`${req.model} cannot search the web; use Sonnet 5 or Opus 5.`, 'bad_request')

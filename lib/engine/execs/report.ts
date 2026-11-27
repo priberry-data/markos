@@ -1,8 +1,9 @@
 import { db } from '@/lib/db'
-import { generateObject, type CallContext } from '@/lib/llm'
+import { canReadFiles, generateObject, type CallContext } from '@/lib/llm'
 import { ExecReportSchema, type ExecKey, type ExecReport } from '../schemas'
 import { applyModelSettings, citationOk, lastReport, recentWork, workContext } from './context'
 import { execFacts } from './exec-facts'
+import { repoDigestBlock } from './repo-digest'
 import { EXECS, systemFor } from './roster'
 import { queueHandoffs, queueOwnMoves } from './tasks'
 import { post } from './team-room'
@@ -30,8 +31,11 @@ export async function writeReport(args: {
   const since = previous?.at ?? new Date(Date.now() - 7 * DAY)
   const ctx = await workContext(productId)
   const readPaths = EXECS[exec].repo ? (exec === 'platform' ? [process.cwd()] : ctx.readPaths) : []
-  const [facts, work, analytics] = await Promise.all([
+  // Claude Code opens the files itself; any other AI gets a digest MarkOS reads.
+  const readFiles = canReadFiles(exec)
+  const [facts, work, analytics, digest] = await Promise.all([
     execFacts(exec, productId, since, readPaths), recentWork(exec, productId, since), analyse(productId),
+    readFiles ? '' : repoDigestBlock(readPaths),
   ])
 
   const call: CallContext = { agent: exec, productId, signal: args.signal, runId: args.runId ?? null, budgetUsd: args.budgetUsd }
@@ -53,13 +57,13 @@ ${work}
 
 ## YOUR LAST HEADLINE
 ${previous?.headline || '(this is your first report)'}
-${readPaths.length ? `\nYou may read files under: ${readPaths.join(', ')}. Read only what you need.` : ''}
+${readPaths.length ? (readFiles ? `\nYou may read files under: ${readPaths.join(', ')}. Read only what you need.` : `\n${digest}`) : ''}
 Run your skill's daily routine. Analyse first (insights, each with its evidence), then decide: what should the company do next in your area? Use your decision rules and pick from your plays where they fit the evidence.
 Moves you can do yourself right now (research, drafts, analysis, plans) are mode "doing_it" with the exact task — the team will do them tonight. Anything public, costly or hard to undo is "needs_your_ok". Don't wait to be asked.
 If nothing happened, say that in one line rather than padding.`,
     schema: ExecReportSchema,
     purpose: 'report',
-    readPaths,
+    readPaths: readFiles ? readPaths : [],
   })
 
   const report = sanitizeReport(data, ctx.known, readPaths)

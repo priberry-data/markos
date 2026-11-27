@@ -46,3 +46,7 @@ export class Limiter {
 }
 
 export const aiLimiter = new Limiter(Number(process.env.MARKOS_MAX_PARALLEL_AI_CALLS ?? 3))
+
+// A model on this computer answers one call at a time; queuing here keeps its
+// timeout about the answer, not the wait.
+export const localLimiter = new Limiter(Number(process.env.MARKOS_MAX_PARALLEL_LOCAL_AI_CALLS ?? 1))

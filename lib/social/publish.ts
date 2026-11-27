@@ -5,7 +5,8 @@ import { notify } from '@/lib/engine/store'
 // Posting to X and LinkedIn — only ever what the founder approved.
 //
 // The founder's one-tap approval is the OK to go public; nothing an agent
-// drafts is posted without it. An approved piece goes out when its scheduled
+// drafts is posted without it, and an AI rewrite of an approved piece sends it
+// back to draft (lib/engine/items.ts). An approved piece goes out when its scheduled
 // time arrives, if that platform is connected. If MarkOS isn't running at that
 // time it goes out the next time it is, and the post records when it really
 // went out.
@@ -135,11 +136,12 @@ export async function publishDue(): Promise<{ posted: number; failed: number }> 
     } catch (err) {
       failed++
       const message = (err as Error).message
-      // Back to approved, with the reason, so it's visible and can go out once fixed.
+      // Back to approved, with the reason, so it's visible and can go out once fixed. Only if it is
+      // still going out: a reject (or a move back to draft) while the post was in flight wins.
       await supabase.from('content_items').update({
         status: 'approved',
         performance_json: { ...(item.performance_json as object ?? {}), last_error: message, last_error_at: new Date().toISOString() },
-      }).eq('id', item.id)
+      }).eq('id', item.id).eq('status', 'posting')
       await notify(item.product_id as string, {
         type: 'post_failed', title: `Couldn’t post “${item.title ?? 'a post'}”`, message, actionUrl: err instanceof PostError && err.reconnect ? '/settings' : '/content',
       })

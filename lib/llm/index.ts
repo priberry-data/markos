@@ -1,13 +1,17 @@
 import { z } from 'zod'
-import { aiLimiter } from './limiter'
+import { aiLimiter, localLimiter } from './limiter'
 import { costUsd } from './pricing'
 import { describeIssues, extractJson, toProviderSchema } from './schema'
-import { AGENTS, AgentKey, modelFor, shapeModelFor } from './models'
+import { AGENTS, AgentKey, GEMINI_FLASH, modelFor, shapeModelFor } from './models'
 import { claudeCode } from './providers/claude-code'
 import { claudeInstallHint } from './install-hint'
 import { gemini } from './providers/gemini'
 import { anthropic } from './providers/anthropic'
 import { fake } from './providers/fake'
+import { openaiCompat } from './providers/openai-compat'
+import { ollama } from './providers/ollama'
+import { compatConnection, readConnections } from './connection'
+import { isNearbyUrl, presetById } from './presets'
 import {
   ModelRef, Provider, ProviderError, ProviderId, ProviderRequest, ProviderResponse, Source,
 } from './types'
@@ -24,7 +28,81 @@ import {
 export type { AgentKey } from './models'
 export { ProviderError } from './types'
 
-const PROVIDERS: Record<ProviderId, Provider> = { 'claude-code': claudeCode, gemini, anthropic, fake }
+const PROVIDERS: Record<ProviderId, Provider> = {
+  'claude-code': claudeCode, gemini, anthropic, 'openai-compat': openaiCompat, ollama, fake,
+}
+
+// ── what each AI can do ─────────────────────────────────────────────────────
+
+/** Can this model search the live web from MarkOS? */
+export function canSearch(ref: ModelRef): boolean {
+  if (ref.provider === 'openai-compat') return presetById(readConnections().compat?.preset)?.search === true
+  if (ref.provider === 'ollama') return false
+  if (ref.provider === 'anthropic') return /^claude-(sonnet|opus)-5/.test(ref.model)
+  return true // Claude Code, Gemini, and the test provider
+}
+
+/** Is this model's AI set up on this computer: installed, picked, or its key saved? */
+export function isSetUp(ref: ModelRef): boolean {
+  return PROVIDERS[ref.provider].isConfigured()
+}
+
+export const NO_SEARCH =
+  'Live web search needs Claude Code, a Gemini key with billing turned on, or an Anthropic API key (or a team running on OpenRouter), and none is set up. ' +
+  'Your AI can’t search the web by itself, and MarkOS won’t let it guess sources. Add one in Settings → Your AI.'
+
+/**
+ * An AI that can't be used for this at all right now: not set up, not signed in, no billing,
+ * or it refuses this kind of request. Another AI may still do the work. A plan's usage limit
+ * is not one of these: the work waits for the reset instead of moving elsewhere.
+ */
+export function unusableAi(err: unknown): err is ProviderError {
+  return err instanceof ProviderError && ['not_configured', 'auth', 'billing', 'bad_request'].includes(err.kind)
+}
+
+/**
+ * Every AI that could do this agent's web searches, best first: its own model
+ * when that can search, then each search-capable AI that is set up. Empty when
+ * none is, and the caller must not pretend to have searched.
+ */
+export function searchCandidates(agent: AgentKey): ModelRef[] {
+  const main = modelFor(agent)
+  // An agent on the Claude plan searches on Claude Code and nowhere else: moving its searches to
+  // an API key would put them on a per-call bill the founder never chose.
+  if (main.provider === 'claude-code') return isSetUp(main) ? [main] : []
+  // One model forced for everything (the tests): no other AI is ever called, searches included.
+  if (process.env.MARKOS_FORCE_MODEL) return canSearch(main) && isSetUp(main) ? [main] : []
+  const out: ModelRef[] = []
+  // Only when it's set up: a model whose key or server is missing searches nothing.
+  if (canSearch(main) && isSetUp(main)) out.push(main)
+  if (claudeCode.isConfigured()) out.push({ provider: 'claude-code', model: 'sonnet' })
+  if (gemini.isConfigured()) out.push({ provider: 'gemini', model: GEMINI_FLASH })
+  if (anthropic.isConfigured()) out.push({ provider: 'anthropic', model: 'claude-sonnet-5' })
+  return out.filter((r, i) => out.findIndex(o => o.provider === r.provider && o.model === r.model) === i)
+}
+
+/** The first AI that would do this agent's web searches, or null. */
+export function searchModelFor(agent: AgentKey): ModelRef | null {
+  return searchCandidates(agent)[0] ?? null
+}
+
+/** Runs on this computer or the local network: one call at a time, and no bill. */
+function isLocal(ref: ModelRef): boolean {
+  if (ref.provider === 'ollama') return true
+  if (ref.provider !== 'openai-compat') return false
+  const c = compatConnection()
+  return !!c && isNearbyUrl(c.baseUrl)
+}
+
+/**
+ * Can this agent's model open files in a product's folder itself? Only Claude
+ * Code can (read-only). For every other AI, MarkOS reads a digest of the repo
+ * and puts it in the prompt (lib/engine/execs/repo-digest.ts).
+ */
+export function canReadFiles(agent: AgentKey): boolean {
+  const p = modelFor(agent).provider
+  return p === 'claude-code' || p === 'fake'
+}
 
 export class BudgetExceededError extends Error {
   constructor(readonly spentUsd: number, readonly budgetUsd: number) {
@@ -124,8 +202,11 @@ async function callOnce({ ctx, model, purpose, request }: RawCall): Promise<Prov
     if (model.provider === 'claude-code') {
       throw new ProviderError(`Claude Code is not installed. ${claudeInstallHint()}`, 'not_configured')
     }
-    const envVar = model.provider === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY'
-    throw new ProviderError(`${envVar} is not set. Add it to .env.local to use ${AGENTS[ctx.agent].name}.`, 'not_configured')
+    const what = {
+      gemini: 'a Gemini key', anthropic: 'an Anthropic API key', 'openai-compat': 'your OpenAI-compatible AI',
+      ollama: 'Ollama', fake: 'the test AI', 'claude-code': 'Claude Code',
+    }[model.provider]
+    throw new ProviderError(`${AGENTS[ctx.agent].name} needs ${what}, which isn’t set up. Add it in Settings → Your AI.`, 'not_configured')
   }
 
   if (ctx.runId && ctx.budgetUsd !== undefined) {
@@ -138,7 +219,7 @@ async function callOnce({ ctx, model, purpose, request }: RawCall): Promise<Prov
     if (ctx.signal?.aborted) throw new ProviderError('Cancelled.', 'aborted')
     const started = Date.now()
     try {
-      const res = await aiLimiter.run(
+      const res = await (isLocal(model) ? localLimiter : aiLimiter).run(
         () => provider.call({ ...request, model: model.model, signal: ctx.signal }),
         ctx.signal,
       )
@@ -212,6 +293,29 @@ export async function generateText(
     readPaths?: string[]
   },
 ): Promise<TextResult> {
+  if (args.grounded && !args.model) {
+    // Search on the first AI that can; if it can't be used at all (not signed in, no billing),
+    // move to the next instead of failing the work. Anything else stops here with its own
+    // error, a plan's usage limit included, so the work pauses until the reset. When none
+    // works, the first error is the one to fix: it belongs to the AI the agent would use.
+    const candidates = searchCandidates(ctx.agent)
+    if (!candidates.length) {
+      // An agent on the Claude plan searches only on Claude Code, so a saved key can't help:
+      // say what is missing.
+      if (modelFor(ctx.agent).provider === 'claude-code') throw new ProviderError(`Claude Code is not installed. ${claudeInstallHint()}`, 'not_configured')
+      throw new ProviderError(NO_SEARCH, 'not_configured')
+    }
+    let first: ProviderError | null = null
+    for (const candidate of candidates) {
+      try {
+        return await generateText(ctx, { ...args, model: candidate })
+      } catch (err) {
+        if (!unusableAi(err)) throw err
+        first ??= err
+      }
+    }
+    throw first
+  }
   const model = args.model ?? modelFor(ctx.agent)
   let maxOutputTokens = args.maxOutputTokens ?? 4096
   for (let widen = 0; ; widen++) {
@@ -370,5 +474,5 @@ ${sourceList}`,
 
 /** Is any provider usable right now? For friendly setup messages in the UI. */
 export function configuredProviders(): ProviderId[] {
-  return (['claude-code', 'gemini', 'anthropic'] as const).filter(p => PROVIDERS[p].isConfigured())
+  return (['claude-code', 'gemini', 'anthropic', 'openai-compat', 'ollama'] as const).filter(p => PROVIDERS[p].isConfigured())
 }

@@ -81,6 +81,9 @@ describe('claude code request', () => {
     expect(deny).toContain(`Read(/${ruleDir(dir)}/**/*.pem)`)
     // and everywhere, whatever the folder
     expect(deny).toContain('Read(//**/.env*)')
+    // and MarkOS's own keys file (Settings → Your AI) and local token
+    expect(deny).toContain(`Read(/${ruleDir(join(supportDir(), 'ai.json'))})`)
+    expect(deny).toContain(`Read(/${ruleDir(join(supportDir(), 'local-token'))})`)
     expect(deny.every(r => r.startsWith('Read(//'))).toBe(true)
 
     await claudeCode.call(base)

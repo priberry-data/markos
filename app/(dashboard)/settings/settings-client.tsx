@@ -4,11 +4,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Check, AlertCircle, Loader2, Trash2, Plus } from 'lucide-react'
-import { CLAUDE_INSTALL } from '@/lib/llm/install-commands'
+import { YourAi, type AiStatus } from '@/components/engine/your-ai'
 
 interface Props {
   profile: { name: string | null; role: string | null; company: string | null; sender_email: string | null; run_budget_usd: number }
-  providers: { claudeCode: boolean; gemini: boolean; anthropic: boolean; resend: boolean; resendFrom: boolean }
+  providers: { resend: boolean; resendFrom: boolean }
+  ai: AiStatus
   agents: Array<{ key: string; name: string; title: string; current: string }>
   models: Array<{ value: string; label: string; note: string }>
   product: { id: string; name: string } | null
@@ -33,22 +34,12 @@ async function send(url: string, method: string, body?: unknown) {
   return out
 }
 
-export function SettingsClient({ profile, providers, agents, models, product, rules, connected }: Props) {
+export function SettingsClient({ profile, providers, ai, agents, models, product, rules, connected }: Props) {
   const router = useRouter()
   const [p, setP] = useState({ ...profile, run_budget_usd: String(profile.run_budget_usd) })
   const [choices, setChoices] = useState(Object.fromEntries(agents.map(a => [a.key, a.current])))
   const [rule, setRule] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
-  const [test, setTest] = useState<null | { ok: boolean; error?: string; missing?: string[]; suggestions?: string[]; search?: { answer: string; sources: number } }>(null)
-
-  async function testAi() {
-    setBusy('test')
-    setTest(null)
-    const res = await fetch('/api/settings/test-ai', { method: 'POST' })
-    setTest(await res.json())
-    setBusy(null)
-  }
-
   async function run(key: string, fn: () => Promise<unknown>, ok: string) {
     setBusy(key)
     try { await fn(); toast.success(ok); router.refresh() } catch (err) { toast.error((err as Error).message) } finally { setBusy(null) }
@@ -57,51 +48,22 @@ export function SettingsClient({ profile, providers, agents, models, product, ru
   return (
     <div className="space-y-6">
       <section className={card}>
-        <p className="font-semibold text-mk-text mb-1">AI providers</p>
-        <p className="text-xs text-mk-muted mb-4">Keys live in <code className="text-mk-warn">.env.local</code> and never leave your Mac. Restart MarkOS after changing them.</p>
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-mk-bg border border-mk-line rounded-xl px-4 py-3">
-            <div><p className="text-sm text-mk-text">Claude Code <span className="text-mk-muted">— default for every agent</span></p>
-              <p className="text-xs text-mk-muted">Runs on your Claude plan: no API key, no per-call bill. Install once: on Mac or Linux run <code className="text-mk-warn">{CLAUDE_INSTALL.unix}</code> in a terminal; on Windows run <code className="text-mk-warn">{CLAUDE_INSTALL.windows}</code> in PowerShell. Then run <code className="text-mk-warn">claude</code> and type /login. The test below checks you’re signed in.</p></div>
-            <Status ok={providers.claudeCode} yes="Installed" no="Not installed — agents can’t run" />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-mk-bg border border-mk-line rounded-xl px-4 py-3">
-            <div><p className="text-sm text-mk-text">Gemini <span className="text-mk-muted">— optional, per agent</span></p>
-              <p className="text-xs text-mk-muted">GEMINI_API_KEY · only needed if you pick a Gemini model below. Get one at <a className="text-mk-accent hover:underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a>.</p></div>
-            <Status ok={providers.gemini} yes="Configured" no="Not set" />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-mk-bg border border-mk-line rounded-xl px-4 py-3">
-            <div><p className="text-sm text-mk-text">Anthropic API <span className="text-mk-muted">— optional, per agent</span></p><p className="text-xs text-mk-muted">ANTHROPIC_API_KEY · billed per call. Only needed if you pick an “Anthropic API” model below; Claude Code never uses it.</p></div>
-            <Status ok={providers.anthropic} yes="Configured" no="Not set" />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-mk-bg border border-mk-line rounded-xl px-4 py-3">
-            <div><p className="text-sm text-mk-text">Email (Resend) <span className="text-mk-muted">— for sending outreach</span></p><p className="text-xs text-mk-muted">RESEND_API_KEY and RESEND_FROM_EMAIL (an address on a domain verified in Resend).</p></div>
-            <Status ok={providers.resend && providers.resendFrom} yes="Ready to send" no={providers.resend ? 'RESEND_FROM_EMAIL not set' : 'Not set — sending is off'} />
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-start gap-3">
-          <button className={btn} disabled={busy !== null || !(providers.claudeCode || providers.gemini || providers.anthropic)} onClick={testAi}>
-            {busy === 'test' && <Loader2 className="w-4 h-4 animate-spin" />} Test AI connection
-          </button>
-          {test && (
-            <div className="text-xs flex-1 min-w-[240px]">
-              {test.error ? <p className="text-mk-bad">{test.error}</p> : (
-                <>
-                  <p className={test.ok ? 'text-mk-ok' : 'text-mk-warn'}>
-                    {test.ok ? 'Working. Signed in, and every configured model is available.' : `These configured models aren’t available to this key: ${test.missing?.join(', ')}`}
-                  </p>
-                  {test.search && <p className="text-mk-muted mt-1">Live search returned {test.search.sources} source(s): “{test.search.answer}”</p>}
-                  {!!test.suggestions?.length && <p className="text-mk-muted mt-1">Available: {test.suggestions.join(', ')}</p>}
-                </>
-              )}
-            </div>
-          )}
+        <p className="font-semibold text-mk-text mb-1">Your AI</p>
+        <p className="text-xs text-mk-muted mb-4">Which AI runs your team. Use your Claude plan, any API key, or a free model on your own computer. Nothing leaves this computer except the calls to the AI you pick.</p>
+        <YourAi status={ai} />
+      </section>
+
+      <section className={card}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><p className="font-semibold text-mk-text mb-1">Email (Resend) <span className="text-xs font-normal text-mk-muted">— for sending outreach</span></p>
+            <p className="text-xs text-mk-muted">RESEND_API_KEY and RESEND_FROM_EMAIL in .env.local (an address on a domain verified in Resend). Restart MarkOS after changing them.</p></div>
+          <Status ok={providers.resend && providers.resendFrom} yes="Ready to send" no={providers.resend ? 'RESEND_FROM_EMAIL not set' : 'Not set — sending is off'} />
         </div>
       </section>
 
       <section className={card}>
         <p className="font-semibold text-mk-text mb-1">Spending</p>
-        <p className="text-xs text-mk-muted mb-4">A run stops cleanly before its AI work passes this value. On Claude Code nothing is billed per call — this is what the same work would cost on the API, so it works as a cap on how much of your plan one run can use.</p>
+        <p className="text-xs text-mk-muted mb-4">A run stops cleanly before its AI work passes this value. On Claude Code nothing is billed per call — this is what the same work would cost on the API, so it works as a cap on how much of your plan one run can use. Models on your computer cost nothing. MarkOS knows the cost of Gemini, the Anthropic API and OpenRouter calls; for other API keys it can’t see prices, so this cap can’t stop them — set a spending limit with that provider.</p>
         <div className="flex items-end gap-3">
           <label className="block w-48"><span className="block text-xs text-mk-muted mb-1.5">Max per run (USD)</span>
             <input className={input} type="number" min={0.05} step={0.05} value={p.run_budget_usd} onChange={e => setP({ ...p, run_budget_usd: e.target.value })} /></label>
@@ -113,7 +75,7 @@ export function SettingsClient({ profile, providers, agents, models, product, ru
 
       <section className={card}>
         <p className="font-semibold text-mk-text mb-1">Models</p>
-        <p className="text-xs text-mk-muted mb-4">Which model each agent uses. Research, search and distribution search the live web on every option.</p>
+        <p className="text-xs text-mk-muted mb-4">Which model each agent uses. Agents follow your team’s AI unless you set one apart here. Web searches run on an AI that can search (see Your AI).</p>
         <div className="space-y-2">
           {agents.map(a => (
             <div key={a.key} className="flex flex-wrap items-center justify-between gap-3 bg-mk-bg border border-mk-line rounded-xl px-4 py-2.5">

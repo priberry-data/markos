@@ -1,6 +1,6 @@
 // Shared types for the provider-neutral AI layer.
 
-export type ProviderId = 'claude-code' | 'gemini' | 'anthropic' | 'fake'
+export type ProviderId = 'claude-code' | 'gemini' | 'anthropic' | 'openai-compat' | 'ollama' | 'fake'
 
 export interface ModelRef {
   provider: ProviderId
@@ -34,7 +34,8 @@ export interface ProviderRequest {
   reasoning?: 'none' | 'light' | 'deep'
   /**
    * Local folders the model may read (a product's repo). Read-only, and only
-   * honoured by providers that can read files (Claude Code).
+   * honoured by providers that can read files (Claude Code). For the others,
+   * callers hand over a digest MarkOS read itself (lib/engine/execs/repo-digest.ts).
    */
   readPaths?: string[]
   signal?: AbortSignal

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { generateObject, generateText, type CallContext } from '@/lib/llm'
+import { canReadFiles, generateObject, generateText, searchModelFor, unusableAi, type CallContext } from '@/lib/llm'
 import { ProviderError, type Source } from '@/lib/llm/types'
 import { startJob } from '@/lib/utils/jobs'
 import { describeFailure } from '../orchestrator'
@@ -8,6 +8,7 @@ import { recordSources } from '../store'
 import { TaskResultSchema, type ExecKey, type TaskResult } from '../schemas'
 import { applyModelSettings, workContext } from './context'
 import { execFacts } from './exec-facts'
+import { repoDigestBlock } from './repo-digest'
 import { analyse, renderAnalytics } from './analytics'
 import { EXECS, systemFor } from './roster'
 import { post } from './team-room'
@@ -236,12 +237,31 @@ ${web ? 'Search the web for what this task needs. ' : ''}${paths.length ? `You m
       purpose: 'task research',
     })
   }
-  for (const g of [await gather(profile.web, []), await gather(false, readPaths)]) {
+  // Only search when some AI that's set up can really search; never let one guess.
+  let web = profile.web && searchModelFor(task.exec) !== null
+  // Why the search didn't run, when every AI that could do it turned out unusable (signed
+  // out, no billing): the task goes on without the web and says so, instead of failing or
+  // stopping the night. A plan's usage limit isn't this: it pauses the task until the reset.
+  let searchFailed = ''
+  const searched = web
+    ? await gather(true, []).catch((err: unknown) => {
+      if (!unusableAi(err)) throw err
+      web = false
+      searchFailed = err.message
+      return null
+    })
+    : null
+  // Claude Code opens the files itself; any other AI gets a digest MarkOS reads.
+  const readFiles = canReadFiles(task.exec)
+  for (const g of [searched, readFiles ? await gather(false, readPaths) : null]) {
     if (!g) continue
     notes = notes ? `${notes}\n\n${g.text}` : g.text
     evidence = evidence ? `${evidence}\n\n${g.evidence}` : g.evidence
     sources = [...sources, ...g.sources.filter(s => !sources.some(k => k.url === s.url))]
   }
+  // Kept apart from the notes: the notes are the agent's own work; these are not.
+  const codeBlock = !readFiles && readPaths.length ? await repoDigestBlock(readPaths) : ''
+  const noSearch = profile.web && !web
 
   // The same facts and analytics a report gets, counted by code.
   const since = new Date(Date.now() - 14 * 86400_000)
@@ -264,9 +284,9 @@ ${factsBlock}
 ${task.task}
 ${task.why ? `(Why: ${task.why})` : ''}
 
-${notes ? `## YOUR WORKING NOTES — your own research for this task, done a moment ago (you searched the web and/or read the files yourself)\n${notes}\n\n## SOURCES (cite only these URLs, copied exactly)\n${sourceList}` : 'You have no web or repo access for this task: work from the context above and say what you would need.'}
-
-Deliver the result, writing as yourself: the notes are your own work, so never say you lack a tool or that "someone else" read the files. If something genuinely needs access nobody on the team has (running code, production data, third-party dashboards), say so once and put it in open_questions for the founder.
+${notes ? `## YOUR WORKING NOTES — your own research for this task, done a moment ago (you searched the web${readFiles ? ' and/or read the files' : ''} yourself)\n${notes}\n\n## SOURCES (cite only these URLs, copied exactly)\n${sourceList}` : codeBlock || noSearch ? '' : 'You have no web or repo access for this task: work from the context above and say what you would need.'}
+${codeBlock ? `\n${codeBlock}\n` : ''}${noSearch ? `\nNO WEB SEARCH: ${searchFailed ? `the web search couldn’t run (${searchFailed})` : 'the AI this team runs on can’t search the web, and no AI that can is set up'}. Nothing here comes from the web: don’t state web facts or give URLs; list what needs checking in open_questions.\n` : ''}
+Deliver the result, writing as yourself${notes ? ': the notes are your own work, so never say you lack a tool or that "someone else" did the research' : ''}. If something genuinely needs access nobody on the team has (running code, production data, third-party dashboards), say so once and put it in open_questions for the founder.
 content_drafts only if the task asks for posts or emails; pipeline_adds only for sales, partner or recruiting work.${task.origin !== 'founder' ? '\nThis task was handed to you by another exec: do not hand it on again (handoffs must be empty).' : ''}`,
     schema: TaskResultSchema,
     purpose: 'task',
@@ -284,6 +304,12 @@ content_drafts only if the task asks for posts or emails; pipeline_adds only for
       pitch_body: p.pitch_body && findPlaceholder(p.pitch_body) ? null : p.pitch_body,
     })),
     handoffs: task.origin === 'founder' ? verified.handoffs.slice(0, 3) : [],
+    // Nothing silent: a search that was meant to run and couldn't is said where the founder reads
+    // (the task, the team room and the morning brief all show the summary), and kept on the record.
+    summary: searchFailed ? `${verified.summary} (Done without a web search, which couldn’t run: ${searchFailed})` : verified.summary,
+    open_questions: searchFailed
+      ? [...verified.open_questions, `Done without a web search, which couldn’t run: ${searchFailed}`]
+      : verified.open_questions,
   }
   await persist(task, result, sources)
   return { result, sources }

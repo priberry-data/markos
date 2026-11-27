@@ -3,6 +3,7 @@ import { CHARTER } from './charter'
 import { db } from '@/lib/db'
 import { generateObject } from '@/lib/llm'
 import { loadBrain, renderBrief } from './brain'
+import { applyModelSettings } from './execs/context'
 import { findPlaceholder } from './sources'
 
 // What the founder does with individual pieces of output: edit, approve,
@@ -17,12 +18,13 @@ type ItemTable = 'content_items' | 'outreach_targets'
 const CONTENT_FIELDS = ['title', 'hook', 'body', 'hashtags', 'cta', 'scheduled_at', 'platform'] as const
 const OUTREACH_FIELDS = ['outreach_draft', 'draft_subject', 'handle_or_email'] as const
 
-async function snapshot(table: ItemTable, id: string, reason: string) {
+/** Keep the item as it is now in its History. Returns the item and the id of the copy. */
+async function snapshot(table: ItemTable, id: string, reason: string): Promise<{ row: Record<string, unknown>; version: string }> {
   const { data } = await db().from(table).select('*').eq('id', id).single()
   if (!data) throw new Error('Item not found')
-  const { error } = await db().from('item_versions').insert({ item_table: table, item_id: id, content: data, reason })
-  if (error) throw new Error(`Could not keep the previous version: ${error.message}`)
-  return data as Record<string, unknown>
+  const { data: kept, error } = await db().from('item_versions').insert({ item_table: table, item_id: id, content: data, reason }).select('id').single()
+  if (error || !kept) throw new Error(`Could not keep the previous version: ${error?.message ?? 'no copy was made'}`)
+  return { row: data as Record<string, unknown>, version: kept.id as string }
 }
 
 function pick(obj: Record<string, unknown>, fields: readonly string[]) {
@@ -120,6 +122,36 @@ const RefinedContent = z.object({
 })
 const RefinedOutreach = z.object({ draft_subject: z.string().nullable(), draft_message: z.string() })
 
+const GOING_OUT = 'This post is going out right now, so nothing was changed. Look at it again in a minute.'
+
+/**
+ * Save words the founder hasn't approved: an AI rewrite, or an earlier version put back. An
+ * approved post goes back to draft in the same write, so it never goes out at its time unseen;
+ * the founder's own edits keep their approval. (An outreach message keeps its stage: an email
+ * goes out only when the founder presses Send on the card that shows its words.) Saved only while
+ * the item's status is still what it was when `item` was read, so a post that went out (or was
+ * rejected) in the meantime is left as it is; other changes made meanwhile, such as the founder's
+ * own edit, are replaced, and kept in History. `version` is the copy just kept in History: when
+ * nothing is saved it is removed again. Returns whether the item needs approving again.
+ */
+async function saveUnapproved(table: ItemTable, item: Record<string, unknown>, update: Record<string, unknown>, version: string): Promise<boolean> {
+  const toDraft = table === 'content_items' && item.status === 'approved'
+  let refused = item.status === 'posting' ? GOING_OUT : ''
+  if (!refused) {
+    let write = db().from(table).update({ ...update, ...(toDraft ? { status: 'draft' } : {}), updated_at: new Date().toISOString() }).eq('id', item.id as string)
+    write = typeof item.status === 'string' ? write.eq('status', item.status) : write.is('status', null)
+    const { data, error } = await write.select('id')
+    if (error) refused = error.message
+    else if (!data?.length) refused = 'This changed in the meantime (a post may have just gone out), so nothing was saved. Look at it again, then retry.'
+  }
+  if (refused) {
+    // Nothing changed, so the copy would only clutter History.
+    await db().from('item_versions').delete().eq('id', version)
+    throw new Error(refused)
+  }
+  return toDraft
+}
+
 /**
  * "Make this shorter", "less salesy", "mention the free plan": one small call
  * that rewrites just this item in the brand voice, keeping the old version.
@@ -127,8 +159,11 @@ const RefinedOutreach = z.object({ draft_subject: z.string().nullable(), draft_m
 export async function refineItem(table: ItemTable, id: string, instruction: string) {
   const how = instruction.trim()
   if (!how) throw new Error('Say how to change it')
+  // The AI chosen in Settings, like every other piece of work.
+  await applyModelSettings()
   const { data: item } = await db().from(table).select('*').eq('id', id).single()
   if (!item) throw new Error('Item not found')
+  if (item.status === 'posting') throw new Error(GOING_OUT)
   const brain = await loadBrain(item.product_id)
   const brief = renderBrief(brain)
 
@@ -151,10 +186,9 @@ CTA: ${item.cta ?? ''}
 ## THE FOUNDER'S INSTRUCTION
 ${how}`,
     })
-    await snapshot('content_items', id, `refined: ${how.slice(0, 200)}`)
-    const { error } = await db().from('content_items').update({ ...data, edited: true, updated_at: new Date().toISOString() }).eq('id', id)
-    if (error) throw new Error(error.message)
-    return data
+    const { version } = await snapshot('content_items', id, `refined: ${how.slice(0, 200)}`)
+    const needsApproval = await saveUnapproved('content_items', item, { ...data, edited: true }, version)
+    return { ...data, needsApproval }
   }
 
   const { data } = await generateObject({ agent: 'distribution', productId: item.product_id }, {
@@ -173,20 +207,17 @@ ${item.outreach_draft}
 ## THE FOUNDER'S INSTRUCTION
 ${how}`,
   })
-  await snapshot('outreach_targets', id, `refined: ${how.slice(0, 200)}`)
-  const { error } = await db().from('outreach_targets')
-    .update({ draft_subject: data.draft_subject, outreach_draft: data.draft_message, updated_at: new Date().toISOString() }).eq('id', id)
-  if (error) throw new Error(error.message)
-  return data
+  const { version } = await snapshot('outreach_targets', id, `refined: ${how.slice(0, 200)}`)
+  const needsApproval = await saveUnapproved('outreach_targets', item, { draft_subject: data.draft_subject, outreach_draft: data.draft_message }, version)
+  return { ...data, needsApproval }
 }
 
-/** Put a previous version back. */
-export async function restoreVersion(versionId: string) {
+/** Put a previous version back. An approved item goes back for approval: see saveUnapproved. */
+export async function restoreVersion(versionId: string): Promise<{ needsApproval: boolean }> {
   const { data: v } = await db().from('item_versions').select('*').eq('id', versionId).single()
   if (!v) throw new Error('Version not found')
   const table = v.item_table as ItemTable
   const fields = table === 'content_items' ? CONTENT_FIELDS : OUTREACH_FIELDS
-  await snapshot(table, v.item_id, 'before restore')
-  const { error } = await db().from(table).update(pick(v.content, fields)).eq('id', v.item_id)
-  if (error) throw new Error(error.message)
+  const { row, version } = await snapshot(table, v.item_id, 'before restore')
+  return { needsApproval: await saveUnapproved(table, row, pick(v.content, fields), version) }
 }

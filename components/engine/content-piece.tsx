@@ -49,7 +49,12 @@ export function ContentPiece({ piece }: { piece: ContentPieceData }) {
   const [text, setText] = useState('')
   const [versions, setVersions] = useState<Array<{ id: string; reason: string | null; created_at: string; content: { body?: string } }> | null>(null)
 
-  async function call(method: 'POST' | 'PATCH', body: Record<string, unknown>, success: string) {
+  const social = piece.platform === 'twitter' || piece.platform === 'linkedin'
+  // New words the founder hasn't approved send an approved piece back to draft (lib/engine/items.ts).
+  const backToDraft = social ? 'It’s back to draft: approve it again to post it.' : 'It’s back to draft: approve it again.'
+  const rewritten = (out: { item?: { needsApproval?: boolean } }) => out.item?.needsApproval ? `Rewritten. ${backToDraft}` : 'Rewritten'
+
+  async function call(method: 'POST' | 'PATCH', body: Record<string, unknown>, success: string | ((out: { item?: { needsApproval?: boolean } }) => string)) {
     setBusy(true)
     try {
       const res = await fetch(`/api/items/content/${piece.id}`, {
@@ -57,7 +62,7 @@ export function ContentPiece({ piece }: { piece: ContentPieceData }) {
       })
       const out = await res.json()
       if (!res.ok) throw new Error(out.error ?? 'Something went wrong')
-      toast.success(success)
+      toast.success(typeof success === 'string' ? success : success(out))
       setMode(null)
       setText('')
       router.refresh()
@@ -77,8 +82,9 @@ export function ContentPiece({ piece }: { piece: ContentPieceData }) {
 
   async function restore(versionId: string) {
     const res = await fetch(`/api/items/versions/${versionId}/restore`, { method: 'POST' })
-    if (res.ok) { toast.success('Restored'); setMode(null); setVersions(null); router.refresh() }
-    else toast.error((await res.json()).error ?? 'Could not restore')
+    const out = await res.json().catch(() => ({}))
+    if (res.ok) { toast.success(out.needsApproval ? `Restored. ${backToDraft}` : 'Restored'); setMode(null); setVersions(null); router.refresh() }
+    else toast.error(out.error ?? 'Could not restore')
   }
 
   const when = piece.scheduled_at ? new Date(piece.scheduled_at) : null
@@ -108,7 +114,7 @@ export function ContentPiece({ piece }: { piece: ContentPieceData }) {
               title: draft.title, body: draft.body,
               hashtags: draft.hashtags.split(/\s+/).filter(Boolean),
               scheduled_at: draft.when ? new Date(draft.when).toISOString() : null,
-            }, 'Saved')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-mk-accent text-white disabled:opacity-50">
+            }, piece.status === 'approved' ? 'Saved. Your own edits don’t need approving again.' : 'Saved')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-mk-accent text-white disabled:opacity-50">
               {busy && <Loader2 className="w-3 h-3 animate-spin" />} Save
             </button>
           </div>
@@ -130,8 +136,8 @@ export function ContentPiece({ piece }: { piece: ContentPieceData }) {
       {mode === 'refine' && (
         <div className="mt-3 flex gap-2">
           <input autoFocus className={input} value={text} onChange={e => setText(e.target.value)} placeholder="e.g. shorter, less salesy, mention the free plan"
-            onKeyDown={e => { if (e.key === 'Enter' && text.trim()) call('POST', { action: 'refine', instruction: text }, 'Rewritten') }} />
-          <button disabled={busy || !text.trim()} onClick={() => call('POST', { action: 'refine', instruction: text }, 'Rewritten')}
+            onKeyDown={e => { if (e.key === 'Enter' && text.trim()) call('POST', { action: 'refine', instruction: text }, rewritten) }} />
+          <button disabled={busy || !text.trim()} onClick={() => call('POST', { action: 'refine', instruction: text }, rewritten)}
             className="inline-flex items-center gap-1.5 px-3 rounded-lg text-xs font-medium bg-mk-accent text-white disabled:opacity-50">
             {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Rewrite
           </button>

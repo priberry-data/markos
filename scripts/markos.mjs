@@ -369,29 +369,48 @@ function shortcut() {
 }
 
 // ---- checks and install ---------------------------------------------------------------------
-function claudeFound() {
-  const name = IS_WIN ? 'claude.exe' : 'claude'
+function onPath(name) {
   return [path.join(os.homedir(), '.local', 'bin', name), ...(process.env.PATH ?? '').split(path.delimiter).map((d) => path.join(d, name))]
     .some((f) => f && fs.existsSync(f))
 }
+const claudeFound = () => onPath(IS_WIN ? 'claude.exe' : 'claude')
+const ollamaFound = () => onPath(IS_WIN ? 'ollama.exe' : 'ollama') || (IS_MAC && fs.existsSync('/Applications/Ollama.app'))
 
-// Returns 'ok', 'warn' (MarkOS installs, but the team needs Claude Code) or 'blocked'.
+/** An AI picked in Settings → Your AI (lib/llm/connection.ts writes ai.json), or a key in .env.local. */
+function otherAiSetUp() {
+  try {
+    const c = JSON.parse(fs.readFileSync(path.join(supportDir(), 'ai.json'), 'utf8'))
+    if (c.compat || c.ollama || c.geminiKey || c.anthropicKey) return true
+  } catch { /* none yet */ }
+  return /^(GEMINI_API_KEY|ANTHROPIC_API_KEY)=\S/m.test(envLocal())
+}
+
+const AI_CHOICES = 'Pick one when MarkOS opens (or later in Settings → Your AI): your Claude plan (Claude Code),\n' +
+  '      an API key (Gemini, OpenRouter, OpenAI, Groq, DeepSeek, Mistral and others), or a free model on\n' +
+  '      this computer with Ollama (https://ollama.com) or LM Studio (https://lmstudio.ai).'
+
+// Returns 'ok', 'warn' (MarkOS installs, but no AI is set up yet) or 'blocked'.
 function doctor() {
   let blocked = false
   const pass = (m) => say(`  ✓ ${m}`)
   const miss = (m, fix) => { say(`  ✗ ${m}\n      ${fix}`); blocked = true }
   const supported = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'linux-arm64', 'win32-x64'].includes(`${process.platform}-${process.arch}`)
-  supported ? pass(`${OS} (${process.arch})`) : miss(`${OS} (${process.arch})`, 'MarkOS runs on Mac, Windows (x64) and Linux (x64 or arm64).')
-  Number(process.versions.node.split('.')[0]) >= 22 ? pass(`Node ${process.version}`) : miss(`Node ${process.version}`, 'Install Node 22 or newer from https://nodejs.org')
+  if (supported) pass(`${OS} (${process.arch})`)
+  else miss(`${OS} (${process.arch})`, 'MarkOS runs on Mac, Windows (x64) and Linux (x64 or arm64).')
+  if (Number(process.versions.node.split('.')[0]) >= 22) pass(`Node ${process.version}`)
+  else miss(`Node ${process.version}`, 'Install Node 22 or newer from https://nodejs.org')
   if (process.getuid?.() === 0) miss('Running as root', 'Run MarkOS as your own user, not with sudo: its database refuses root.')
   pass('Database: runs without Docker, nothing else to install')
-  if (claudeFound()) { pass('Claude Code (make sure you are signed in: run `claude` and type /login)'); return blocked ? 'blocked' : 'ok' }
+  const end = (ok) => (blocked ? 'blocked' : ok ? 'ok' : 'warn')
+  if (claudeFound()) { pass('AI: Claude Code (make sure you are signed in: run `claude` and type /login)'); return end(true) }
+  if (otherAiSetUp()) { pass('AI: set up in Settings → Your AI'); return end(true) }
+  if (ollamaFound()) { pass('AI: Ollama is installed (free, on this computer). Choose it in Settings → Your AI.'); return end(true) }
   if (IS_WIN && (process.env.PATH ?? '').split(path.delimiter).some((d) => d && fs.existsSync(path.join(d, 'claude.cmd')))) {
-    say('  ! Claude Code is installed through npm (claude.cmd), which MarkOS can\'t start.\n      Install the native version in PowerShell: irm https://claude.ai/install.ps1 | iex   then run claude and type /login')
-    return blocked ? 'blocked' : 'warn'
+    say('  ! Claude Code is installed through npm (claude.cmd), which MarkOS can\'t start.\n      Install the native version in PowerShell: irm https://claude.ai/install.ps1 | iex   then run claude and type /login\n      Or: ' + AI_CHOICES)
+    return end(false)
   }
-  say(`  ! Claude Code isn't installed: the team needs it to work.\n      ${IS_WIN ? 'In PowerShell: irm https://claude.ai/install.ps1 | iex' : 'In a terminal: curl -fsSL https://claude.ai/install.sh | bash'}   then run claude and type /login`)
-  return blocked ? 'blocked' : 'warn'
+  say(`  ! No AI set up yet: the team needs one to work.\n      ${AI_CHOICES}\n      For Claude Code: ${IS_WIN ? 'in PowerShell run  irm https://claude.ai/install.ps1 | iex' : 'in a terminal run  curl -fsSL https://claude.ai/install.sh | bash'}   then run claude and type /login`)
+  return end(false)
 }
 
 async function install() {
@@ -408,7 +427,7 @@ async function install() {
   if (process.env.MARKOS_NO_SHORTCUT) say('Skipped (MARKOS_NO_SHORTCUT).')
   else shortcut()
   say(`\nDone. Open MarkOS from your Desktop any time, or run: node scripts/markos.mjs open`)
-  say('First stop: Settings → Test AI connection.')
+  say('First stop: Settings → Your AI, then Test AI connection.')
   // Open it now, the way an app opens after it installs: only for a person at a terminal, never in
   // CI, and on Linux only with a screen (an SSH session gets the address instead).
   const screen = IS_WIN || IS_MAC || process.env.DISPLAY || process.env.WAYLAND_DISPLAY
@@ -419,7 +438,7 @@ async function install() {
       else spawn(NODE, [SELF, 'open'], { cwd: REPO, detached: true, windowsHide: true, stdio: 'ignore' }).unref()
     } else say(`\nNo screen here: run "node scripts/markos.mjs start", then open ${URL} from a browser on this machine.`)
   }
-  if (!claudeFound()) say('Claude Code isn’t installed yet: MarkOS runs, but the team needs it to work (see above).')
+  if (!claudeFound() && !otherAiSetUp() && !ollamaFound()) say('No AI set up yet: MarkOS runs, but pick an AI in Settings → Your AI so the team can work (see above).')
 }
 
 const [cmd, arg] = process.argv.slice(2)

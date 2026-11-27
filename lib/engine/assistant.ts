@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { generateObject } from '@/lib/llm'
 import { AGENTS, type AgentKey } from '@/lib/llm/models'
 import { loadBrain, renderBrief } from './brain'
+import { applyModelSettings } from './execs/context'
 import { pendingCounts } from './status'
 import { addHouseRule, refineItem } from './items'
 import { reviseStrategy, startAgentRun, PRODUCTION_AGENTS } from './orchestrator'
@@ -54,6 +55,8 @@ export async function history(productId: string, limit = 40) {
 export async function ask(productId: string, message: string) {
   const text = message.trim().slice(0, 4000)
   if (!text) throw new Error('Say something first')
+  // The AI chosen in Settings, like every other piece of work.
+  await applyModelSettings()
   const supabase = db()
   const [brain, counts, past, { data: content }, { data: steps }] = await Promise.all([
     loadBrain(productId),
@@ -117,8 +120,10 @@ export async function confirmAction(messageId: string) {
         if (!action.item_id || !action.instruction) throw new Error('Which piece, and what to change?')
         const { data: item } = await supabase.from('content_items').select('id').eq('id', action.item_id).eq('product_id', productId).maybeSingle()
         if (!item) throw new Error('That piece no longer exists')
-        await refineItem('content_items', action.item_id, action.instruction)
-        result = 'Rewritten — the previous version is in its history.'
+        const { needsApproval } = await refineItem('content_items', action.item_id, action.instruction)
+        result = needsApproval
+          ? 'Rewritten — it was approved, so it’s back to draft until you approve the new words. The previous version is in its history.'
+          : 'Rewritten — the previous version is in its history.'
         break
       }
       case 'add_rule':
