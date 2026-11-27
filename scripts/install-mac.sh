@@ -19,7 +19,7 @@ echo "\n4/4  Putting MarkOS on your Desktop…"
 ./scripts/make-desktop-app.sh
 
 print "\nDone. MarkOS is on your Desktop (the first start builds it, about a minute)."
-print "First stop: Settings → Test AI connection."
+print "First stop: Settings → Your AI, then Test AI connection."
 # Open it now, like an app after it installs: only for a person at a terminal, never in CI.
 if [ -t 1 ] && [ -z "$CI" ] && [ -z "$MARKOS_NO_OPEN" ]; then
   print "\nOpening MarkOS…"

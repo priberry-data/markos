@@ -12,7 +12,7 @@ import { when } from '@/lib/utils/when'
 async function api(url: string, method: string, body?: unknown) {
   const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
   const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw Object.assign(new Error(json.error ?? 'Something went wrong'), { body: json })
+  if (!res.ok) throw Object.assign(new Error(json.error ?? 'Something went wrong'), { body: json, status: res.status })
   return json
 }
 
@@ -21,20 +21,24 @@ function useAct() {
   const [busy, setBusy] = useState<string | null>(null)
   const act = async (key: string, fn: () => Promise<unknown>, ok?: string) => {
     setBusy(key)
-    try { await fn(); if (ok) toast.success(ok); router.refresh() } catch (err) { toast.error((err as Error).message) } finally { setBusy(null) }
+    try { await fn(); if (ok) toast.success(ok); router.refresh() } catch (err) {
+      toast.error((err as Error).message)
+      // Refused because the page is out of date (Send checks the version shown): show what's there now.
+      if ((err as { status?: number }).status === 409) router.refresh()
+    } finally { setBusy(null) }
   }
   return { busy, act }
 }
 
 
-/** "Set up 20 minutes with the CFO about Employer pricing" — Myra books it. */
+/** "Set up 20 minutes with the CFO about team pricing" — Myra books it. */
 export function BookMeeting() {
   const [text, setText] = useState('')
   const { busy, act } = useAct()
   return (
     <div className="flex gap-2">
       <input className={tone.input} value={text} onChange={e => setText(e.target.value)} disabled={busy !== null}
-        placeholder="Ask Myra: “set up time with the CFO about Employer pricing this week”"
+        placeholder="Ask Myra: “set up time with the CFO about team pricing this week”"
         onKeyDown={e => { if (e.key === 'Enter' && text.trim()) act('book', async () => { const r = await api('/api/meetings', 'POST', { text }); setText(''); toast.success(`Booked for ${when(r.scheduledAt)}`) }) }} />
       <button className={tone.primaryBtn} disabled={busy !== null || !text.trim()}
         onClick={() => act('book', async () => { const r = await api('/api/meetings', 'POST', { text }); setText(''); toast.success(`Booked for ${when(r.scheduledAt)}`) })}>
@@ -139,19 +143,41 @@ export function TodoRow({ id, task, due, why }: { id: string; task: string; due:
 export interface CustomerView {
   id: string; name: string; email: string | null; company: string | null; segment: string | null
   draft_subject: string | null; draft_body: string | null; draft_purpose: string | null; last_contacted_at: string | null
+  updated_at: string | null
 }
 
 export function CustomerCard({ c, canSend }: { c: CustomerView; canSend: boolean }) {
   const { busy, act } = useAct()
-  const [subject, setSubject] = useState(c.draft_subject ?? '')
-  const [body, setBody] = useState(c.draft_body ?? '')
-  const [email, setEmail] = useState(c.email ?? '')
-  const send = (force = false): Promise<void> => act('send', async () => {
-    try { await api(`/api/customers/${c.id}/send`, 'POST', { force }) }
+  // What's saved. A field the founder hasn't changed takes up a newly saved value (a new follow-up
+  // from the team, another tab's save); a field they're editing keeps their words, including words
+  // typed after their own Save and before the page caught up. With no draft left (sent or dropped)
+  // there's nothing to edit, so its fields show what's saved and nothing typed into it comes back.
+  const saved = { email: c.email ?? '', subject: c.draft_subject ?? '', body: c.draft_body ?? '' }
+  const [seen, setSeen] = useState(saved)
+  const [subject, setSubject] = useState(saved.subject)
+  const [body, setBody] = useState(saved.body)
+  const [email, setEmail] = useState(saved.email)
+  if (saved.email !== seen.email || saved.subject !== seen.subject || saved.body !== seen.body) {
+    if (saved.email !== seen.email && email === seen.email) setEmail(saved.email)
+    if (!saved.body) {
+      setSubject(saved.subject)
+      setBody(saved.body)
+    } else {
+      if (saved.subject !== seen.subject && subject === seen.subject) setSubject(saved.subject)
+      if (saved.body !== seen.body && body === seen.body) setBody(saved.body)
+    }
+    setSeen(saved)
+  }
+  // Send goes with the saved words only, so the card must show them: save edits first.
+  const unsaved = email !== saved.email || subject !== saved.subject || body !== saved.body
+  const send = () => act('send', async () => {
+    const shown = { version: c.updated_at, to: email, subject, body }
+    try { await api(`/api/customers/${c.id}/send`, 'POST', shown) }
     catch (err) {
+      // Written to within two weeks: send only if the founder says so, in this same action.
       const b = (err as { body?: { canForce?: boolean } }).body
-      if (b?.canForce && confirm(`${(err as Error).message} Send anyway?`)) return send(true)
-      throw err
+      if (!b?.canForce || !confirm(`${(err as Error).message} Send anyway?`)) throw err
+      await api(`/api/customers/${c.id}/send`, 'POST', { ...shown, force: true })
     }
   }, `Sent to ${c.name}`)
   return (
@@ -175,8 +201,8 @@ export function CustomerCard({ c, canSend }: { c: CustomerView; canSend: boolean
           <div className="flex flex-wrap gap-2">
             {(subject !== (c.draft_subject ?? '') || body !== (c.draft_body ?? '')) &&
               <button className={tone.ghostBtn} onClick={() => act('save', () => api(`/api/customers/${c.id}`, 'PATCH', { draft_subject: subject, draft_body: body }), 'Draft saved')}>Save edits</button>}
-            <button className={tone.primaryBtn} disabled={busy !== null || !canSend || !c.email}
-              title={!canSend ? 'Set RESEND_API_KEY and RESEND_FROM_EMAIL to send' : !c.email ? 'Add an email first' : undefined}
+            <button className={tone.primaryBtn} disabled={busy !== null || !canSend || !c.email || unsaved}
+              title={!canSend ? 'Set RESEND_API_KEY and RESEND_FROM_EMAIL to send' : !c.email ? 'Add an email first' : unsaved ? 'Save your edits first' : undefined}
               onClick={() => send()}>
               {busy === 'send' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />} Approve & send
             </button>
@@ -194,7 +220,7 @@ export function AddCustomers({ productId }: { productId: string }) {
   return (
     <div className="space-y-2">
       <textarea className={cn(tone.input, 'min-h-[70px] font-mono text-xs')} value={lines} onChange={e => setLines(e.target.value)}
-        placeholder={'One per line: Name, email, company, segment\nAsha Rao, asha@acme.in, Acme, design partner'} />
+        placeholder={'One per line: Name, email, company, segment\nAsha Rao, asha@example.com, Acme, design partner'} />
       <button className={tone.primaryBtn} disabled={busy !== null || !lines.trim()}
         onClick={() => act('add', async () => { const r = await api('/api/customers', 'POST', { productId, lines }); setLines(''); toast.success(`Added ${r.added}`) })}>Add customers</button>
     </div>

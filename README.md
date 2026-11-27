@@ -132,7 +132,8 @@ install's secret it comes up on keys that match nothing.
    nothing is guessed.
 3. **Night shift**: `node scripts/markos.mjs night-shift` runs it every day at 02:00 (launchd on a
    Mac, Task Scheduler on Windows, a systemd user timer or cron on Linux). A computer that was
-   asleep or off at 02:00 runs it when it wakes.
+   asleep at 02:00 runs it when it wakes (Mac, Windows, systemd), and one that was off runs it when
+   it next starts (Windows and systemd, not a Mac). With cron, a missed night is skipped.
 4. Optional, in `.env.local`:
    - `RESEND_API_KEY` + `RESEND_FROM_EMAIL` to send outreach you approve
    - your own X / LinkedIn app keys, then connect them in Settings so approved posts go out on time
@@ -209,7 +210,7 @@ enforces them.
 |---|---|
 | Agents get only the tools a step needs: web search, or read-only file tools. Never write, edit or shell tools. | `tests/llm/claude-code.test.ts` "gives each call only the tools it needs" |
 | One call never gets both the web and your files, so a web page can't steer an agent into leaking a file. | `tests/llm/claude-code.test.ts` "never gives one call both the web and files" |
-| File-reading calls are denied `.env*`, `*.pem` and SSH keys, in every folder they may read and everywhere else. Checked against real Claude Code on a Mac; on Windows the rules use Claude Code's documented path form (`/c/...`), not yet checked against real Claude Code there. | `tests/llm/claude-code.test.ts` "denies reading secret files" |
+| File-reading calls are denied `.env*`, `*.pem`, SSH keys and anything in a `.ssh` folder, in every folder they may read and everywhere else. Checked against real Claude Code on a Mac; on Windows the rules use Claude Code's documented path form (`/c/...`), not yet checked against real Claude Code there. | `tests/llm/claude-code.test.ts` "denies reading secret files" |
 | An `ANTHROPIC_API_KEY` in your environment never quietly moves billing off your plan. | `tests/llm/claude-code.test.ts` "never lets an API key switch billing" |
 | Every AI other than Claude Code gets no tool that touches your computer: text in, text out (a web search, where the AI does one, runs on the provider's servers). For them MarkOS reads a digest of your code itself, which never lists or reads `.env*`, keys or secret-named files, never follows a link, and never reads anything git ignores, even when the product folder is inside a bigger repository. | `tests/engine/repo-digest.test.ts`, `tests/llm/openai-compat.test.ts`, `tests/llm/gemini.test.ts`, `tests/llm/anthropic.test.ts` |
 | An AI that can't search the web is never asked to: searches go to one that can, or the agent says it had none. A team on your Claude plan never has its searches moved onto a per-call API bill. | `tests/llm/routing.test.ts`, `tests/engine/execs.test.ts` "goes on without the web, and says why" |
@@ -222,9 +223,13 @@ enforces them.
 ## Your data
 
 Everything lives in a Postgres database on your computer. `node scripts/markos.mjs backup` writes
-a compressed dump, and runs after every night shift: on a Mac to iCloud Drive → *MarkOS Backups*
-when iCloud is on, otherwise to `backups` in the data folder (`MARKOS_BACKUP_DIR` to choose,
-for example a synced Dropbox or OneDrive folder). It keeps the last 30. Restore with
+a compressed dump, and runs after each scheduled night shift: on a Mac to iCloud Drive → *MarkOS Backups*
+when iCloud is on, otherwise to `backups` in the data folder. It keeps the last 30.
+`MARKOS_BACKUP_DIR` picks another folder, for example a synced Dropbox or OneDrive folder. The
+scheduled night shift doesn't read your shell's startup files, so for its backups set it where the
+schedule sees it: `~/.zshenv` on a Mac, a user environment variable on Windows (`setx`), and on
+Linux a line `MARKOS_BACKUP_DIR=…` in `~/.config/environment.d/markos.conf` for the systemd timer
+(read when you next log in) or a line at the top of your crontab. Restore with
 `node scripts/markos.mjs restore <file>`. Secrets in `.env.local` and your X /
 LinkedIn connections are never in git or the backups: keep the secrets in your password
 manager, and reconnect the accounts after a restore.

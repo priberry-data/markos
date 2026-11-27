@@ -103,6 +103,53 @@ jobs:
           node scripts/markos.mjs start
           node -e "fetch('http://localhost:3001/api/health').then(r=>r.json()).then(j=>{console.log(j);if(!j.ok)process.exit(1)})"
           node scripts/markos.mjs stop
+  no-claude-install:
+    # The one-line install on a computer without Claude Code: the root install.sh (on a Mac it runs
+    # scripts/install-mac.sh) must finish, say no AI is set up yet, and MarkOS must then start.
+    name: install.sh without Claude Code (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      MARKOS_HOME: ${{ github.workspace }}/../noclaude-home
+      MARKOS_SHORTCUT_DIR: ${{ github.workspace }}/../noclaude-desktop
+      MARKOS_APP: ${{ github.workspace }}/../noclaude-desktop/MarkOS.app
+      MARKOS_BACKUP_DIR: ${{ github.workspace }}/../noclaude-backups
+      MARKOS_NO_OPEN: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: no Claude Code anywhere MarkOS looks for it
+        shell: bash
+        run: |
+          for c in "$(command -v claude || true)" ~/.local/bin/claude ~/.claude/local/claude /opt/homebrew/bin/claude /usr/local/bin/claude; do
+            if [ -n "$c" ] && [ -e "$c" ]; then echo "Claude Code is at $c, but this job must run without it."; exit 1; fi
+          done
+      - name: sh install.sh
+        timeout-minutes: 25
+        shell: bash
+        run: sh install.sh 2>&1 | tee "$RUNNER_TEMP/install.log"
+      - name: it said no AI is set up yet
+        shell: bash
+        run: grep "No AI set up yet" "$RUNNER_TEMP/install.log"
+      - name: start and health check
+        timeout-minutes: 10
+        run: |
+          node scripts/markos.mjs start
+          node -e "fetch('http://localhost:3001/api/health').then(r=>r.json()).then(j=>{console.log(j);if(!j.ok)process.exit(1)})"
+          node scripts/markos.mjs stop
+      - name: logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          for f in "$MARKOS_HOME"/logs/*.log "$MARKOS_HOME"/native/logs/*.log ~/Library/Logs/MarkOS/*.log; do [ -f "$f" ] && { echo "=== $f"; tail -60 "$f"; }; done; true
   local-ai:
     # A real model, not a stub: Ollama with a small model on the CI machine. MarkOS talks to it
     # through its own Ollama provider and through the OpenAI-compatible one (Ollama serves /v1 too).
@@ -127,7 +174,9 @@ jobs:
           ollama pull "$MARKOS_LIVE_OLLAMA"
       - name: MarkOS works with it
         timeout-minutes: 15
-        run: npx vitest run tests/llm/live-local.test.ts
+        run: npx vitest run tests/llm/live-local.test.ts --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/live-local.json"
+      - name: every live test ran (a skipped one would pass without proving anything)
+        run: node -e "const r=require(process.argv[1]);const skipped=r.numPendingTests+r.numTodoTests;console.log(r.numPassedTests+' passed, '+skipped+' skipped');if(skipped>0||r.numPassedTests===0)process.exit(1)" "$RUNNER_TEMP/live-local.json"
   lint:
     runs-on: ubuntu-latest
     steps:

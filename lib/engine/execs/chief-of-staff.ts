@@ -25,9 +25,9 @@ THE TEAM AND WHAT EACH OWNS:
 ${EXEC_KEYS.map(k => `- ${k} (${EXECS[k].title}): ${EXECS[k].owns}`).join('\n')}
 
 HOW TO ROUTE:
-- Read for meaning, not keywords. "Paisa kahan ja raha hai" is finance; "nobody knows about SCOUT" is marketing; "get ten companies to try it" is sales.
+- Read for meaning, not keywords. "Paisa kahan ja raha hai" is finance; "nobody knows about the new export feature" is marketing; "get ten companies to try it" is sales.
 - Split an instruction into one task per exec who has real work in it. One exec, one task per product — combine related asks.
-- A task names exactly one product from PRODUCTS, or none for portfolio-wide work. If the founder names a sub-product (SCOUT, VERA, the labs), use the product it belongs to and keep the name in the task.
+- A task names exactly one product from PRODUCTS, or none for portfolio-wide work. If the founder names a sub-product (a feature, an add-on, a companion tool), use the product it belongs to and keep the name in the task.
 - Write each task so the exec can act on it alone, with the founder's specifics kept (numbers, names, dates).
 - Ask a clarifying question ONLY when no sensible reading exists. A vague instruction still gets a sensible first task.
 ${CHIEF_OF_STAFF_RULES}`

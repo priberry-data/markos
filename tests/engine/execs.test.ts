@@ -97,7 +97,7 @@ function fakeTeam(req: ProviderRequest) {
       one_liner: 'Verified careers', description: 'Proof of skill.', url: null, category: 'Career tech', stage: 'beta',
       target_audience: 'Job seekers', target_geography: 'India', currency: 'INR', pricing_summary: null, brand_voice: 'Plain',
       primary_color: '#7c86ff', secondary_color: null, competitors: ['Rival'], goals: ['10 design partners'],
-      claims_rules: ['Never say "guaranteed job"'], offerings: [{ name: 'SCOUT', what: 'Sourcing agent' }],
+      claims_rules: ['Never say "guaranteed job"'], offerings: [{ name: 'Finder', what: 'Sourcing agent' }],
       key_docs: [`${repo}/README.md`], conflicts: [{ topic: 'HQ', values: ['San Francisco', 'Berlin'], where: 'a.ts vs b.md' }],
       unknowns: ['Plan prices'],
     }) }

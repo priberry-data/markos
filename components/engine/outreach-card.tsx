@@ -24,6 +24,7 @@ export interface OutreachTarget {
   verified: boolean
   status: string
   sent_at: string | null
+  updated_at: string | null
 }
 
 const STAGES = [
@@ -43,20 +44,24 @@ export function OutreachCard({ target, canEmail }: { target: OutreachTarget; can
   const [mode, setMode] = useState<null | 'edit' | 'refine' | 'reject'>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [text, setText] = useState('')
-  const [draft, setDraft] = useState({ email: target.handle_or_email ?? '', subject: target.draft_subject ?? '', body: target.outreach_draft ?? '' })
+  // Edit opens on the words the card shows now (a rewrite may have landed since it first rendered).
+  const draftOf = () => ({ email: target.handle_or_email ?? '', subject: target.draft_subject ?? '', body: target.outreach_draft ?? '' })
+  const [draft, setDraft] = useState(draftOf)
 
   async function req(url: string, method: string, body: Record<string, unknown> | null, success: string, key: string) {
     setBusy(key)
     try {
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
       const out = await res.json()
-      if (!res.ok) throw new Error(out.error ?? 'Something went wrong')
+      if (!res.ok) throw Object.assign(new Error(out.error ?? 'Something went wrong'), { status: res.status })
       toast.success(success)
       setMode(null)
       setText('')
       router.refresh()
     } catch (err) {
       toast.error((err as Error).message)
+      // Refused because the card is out of date (Send checks the version shown): show what's there now.
+      if ((err as { status?: number }).status === 409) router.refresh()
     } finally {
       setBusy(null)
     }
@@ -154,14 +159,15 @@ export function OutreachCard({ target, canEmail }: { target: OutreachTarget; can
             </button>
           )}
           {canEmail && isEmail && target.contact_confirmed && !target.sent_at && (
-            <button disabled={busy !== null} onClick={() => req(`/api/outreach/${target.id}/send`, 'POST', null, `Sent to ${target.handle_or_email}`, 'send')}
+            <button disabled={busy !== null} onClick={() => req(`/api/outreach/${target.id}/send`, 'POST',
+              { version: target.updated_at, to: target.handle_or_email, subject: target.draft_subject, body: target.outreach_draft }, `Sent to ${target.handle_or_email}`, 'send')}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-mk-ok/15 text-mk-ok disabled:opacity-50">
               {busy === 'send' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />} Send email
             </button>
           )}
           {target.sent_at && <span className="text-xs text-mk-ok px-2">Sent {new Date(target.sent_at).toLocaleDateString()}</span>}
           <CopyButton text={[target.draft_subject ? `Subject: ${target.draft_subject}` : null, target.outreach_draft].filter(Boolean).join('\n\n')} />
-          <button onClick={() => setMode('edit')} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-mk-muted hover:text-mk-text hover:bg-mk-line"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+          <button onClick={() => { setDraft(draftOf()); setMode('edit') }} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-mk-muted hover:text-mk-text hover:bg-mk-line"><Pencil className="w-3.5 h-3.5" /> Edit</button>
           <button onClick={() => setMode(mode === 'refine' ? null : 'refine')} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-mk-muted hover:text-mk-text hover:bg-mk-line"><Sparkles className="w-3.5 h-3.5" /> Rewrite…</button>
           <button onClick={() => setMode(mode === 'reject' ? null : 'reject')} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-mk-muted hover:text-mk-bad hover:bg-mk-bad/10 ml-auto"><X className="w-3.5 h-3.5" /> Remove</button>
         </div>

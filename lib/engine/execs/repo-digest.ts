@@ -25,7 +25,9 @@ const MAX_TOTAL = 40_000
 /** Never read or list these, in any folder. */
 export function isSecretFile(file: string): boolean {
   const base = path.basename(file).toLowerCase()
-  return base.startsWith('.env') || base.endsWith('.pem') || base.endsWith('.key') || base.startsWith('id_rsa') || base.startsWith('id_ed25519')
+  return base.startsWith('.env') || base.endsWith('.pem') || base.endsWith('.key')
+    || /^id_(rsa|ed25519|ecdsa|dsa)/.test(base)
+    || file.toLowerCase().split(/[\\/]/).includes('.ssh')
     || /(^|[._-])(secret|secrets|credentials?)([._-]|$)/.test(base)
 }
 

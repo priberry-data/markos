@@ -42,7 +42,28 @@ export async function editContent(id: string, patch: Record<string, unknown>) {
   if (error) throw new Error(error.message)
 }
 
-export async function setContentStatus(id: string, status: 'approved' | 'posted' | 'draft') {
+export const APPROVE_RELOAD = 'Reload the page and approve again: MarkOS approves only the version on your screen.'
+export const APPROVE_CHANGED = 'This changed since the page loaded (rewritten, edited or already approved), so it wasn’t approved. Look at it again, then approve.'
+
+/**
+ * Approve the version the founder is looking at. `version` is the piece's `updated_at` as their
+ * card showed it, the exact string the database gave (never re-parsed): every change to a piece's
+ * words moves it, so a rewrite that lands after the page loaded is never approved unseen. Only a
+ * draft is approved, in one conditional write.
+ */
+export async function approveContent(id: string, version: string) {
+  if (!version) throw new Error(APPROVE_RELOAD)
+  const { data: item } = await db().from('content_items').select('title, body').eq('id', id).single()
+  if (!item) throw new Error('Item not found')
+  const gap = findPlaceholder(item.body) ?? findPlaceholder(item.title)
+  if (gap) throw new Error(`This piece still contains ${gap}. Edit it first.`)
+  const { data, error } = await db().from('content_items').update({ status: 'approved', updated_at: new Date().toISOString() })
+    .eq('id', id).eq('status', 'draft').eq('updated_at', version).select('id')
+  if (error) throw new Error(error.message)
+  if (!data?.length) throw new Error(APPROVE_CHANGED)
+}
+
+export async function setContentStatus(id: string, status: 'posted' | 'draft') {
   const { data: item } = await db().from('content_items').select('title, body').eq('id', id).single()
   if (!item) throw new Error('Item not found')
   if (status !== 'draft') {

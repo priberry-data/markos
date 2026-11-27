@@ -39,8 +39,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       return { error: err }
     }
 
-    const data = await res.json() as { id: string }
-    return { id: data.id }
+    // Resend took the email. An answer that can't be read doesn't make it unsent.
+    const data = (await res.json().catch(() => null)) as { id?: string } | null
+    return { id: data?.id }
   } catch (err) {
     console.error('[Resend] Network error:', err)
     return { error: String(err) }

@@ -81,6 +81,11 @@ describe('claude code request', () => {
     expect(deny).toContain(`Read(/${ruleDir(dir)}/**/*.pem)`)
     // and everywhere, whatever the folder
     expect(deny).toContain('Read(//**/.env*)')
+    // every kind of SSH private key, and anything in a .ssh folder
+    for (const g of ['**/id_rsa*', '**/id_ed25519*', '**/id_ecdsa*', '**/id_dsa*', '**/.ssh/**']) {
+      expect(deny).toContain(`Read(/${ruleDir(dir)}/${g})`)
+      expect(deny).toContain(`Read(//${g})`)
+    }
     // and MarkOS's own keys file (Settings → Your AI) and local token
     expect(deny).toContain(`Read(/${ruleDir(join(supportDir(), 'ai.json'))})`)
     expect(deny).toContain(`Read(/${ruleDir(join(supportDir(), 'local-token'))})`)

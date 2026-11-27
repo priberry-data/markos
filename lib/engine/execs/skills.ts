@@ -142,7 +142,7 @@ export const SKILLS: Record<SkillKey, Skill> = {
       'Read the pricing as written in each repo’s code and docs, and check that what the code charges matches what marketing says.',
       'From FACTS and the founder’s numbers: revenue, paying users, burn, runway, AI spend. Compare with last week.',
       'Say whether the company is default alive or default dead, given what is known. If unknown, list exactly the 3 numbers needed to tell.',
-      'Look for a pricing move: a free tier that gives away too much, a plan nobody buys, annual prepay, a usage-priced agent (SCOUT/VERA) without a price.',
+      'Look for a pricing move: a free tier that gives away too much, a plan nobody buys, annual prepay, a usage-priced AI feature without a price.',
     ],
     rules: [
       'Runway under 6 months is red: say it first, every day, until it’s fixed.',
@@ -151,7 +151,7 @@ export const SKILLS: Record<SkillKey, Skill> = {
       'Price changes are one-way doors for existing customers: propose and grandfather; never change them silently.',
     ],
     plays: [
-      { play: 'Founding-customer pricing: a lifetime discount for the first N paying customers or partners, in exchange for feedback and a logo.', when: 'Pre-revenue or design-partner stage (Employer).' },
+      { play: 'Founding-customer pricing: a lifetime discount for the first N paying customers or partners, in exchange for feedback and a logo.', when: 'Pre-revenue or design-partner stage.' },
       { play: 'Annual prepay at about 2 months free.', when: 'There is monthly churn and cash is tight.' },
       { play: 'Willingness-to-pay check: a 5-question survey or 5 calls (Van Westendorp style).', when: 'Prices were set by guess.' },
       { play: 'Good–better–best with a decoy middle tier.', when: 'One plan, or buyers can’t tell plans apart.' },
@@ -268,7 +268,7 @@ export const SKILLS: Record<SkillKey, Skill> = {
       'Never add a prospect without a source page, and never guess an email address.',
     ],
     plays: [
-      { play: 'Design-partner programme: 10 companies, a 90-day free or founding price, a weekly 20-minute call, a logo and a case study.', when: 'Pre-revenue B2B (Employer, SCOUT, VERA).' },
+      { play: 'Design-partner programme: 10 companies, a 90-day free or founding price, a weekly 20-minute call, a logo and a case study.', when: 'Pre-revenue B2B.' },
       { play: 'Trigger-based outbound: companies that just raised money or are hiring for the role the product helps.', when: 'Searchable buying triggers exist.' },
       { play: 'Partner channel: colleges, bootcamps and placement cells distribute to many users at once.', when: 'B2C with institutional gatekeepers (schools, employers, clinics).' },
       { play: 'Fellowship and community recruiting through university labs, clubs and online communities.', when: 'Recruiting people rather than buyers (fellows, contributors, researchers).' },

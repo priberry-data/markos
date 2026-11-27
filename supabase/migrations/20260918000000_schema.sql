@@ -63,7 +63,7 @@ create table products (
   -- monthly paid-ads budget; 0 means no paid ads (MAX is skipped)
   ad_budget_monthly numeric not null default 0,
   launch_date date,
-  -- IVY (fundraising) runs only when raising; VERA (PR) only when announcing
+  -- IVY (fundraising) runs only when raising; ECHO (PR) only when announcing
   raising boolean not null default false,
   announcing_launch boolean not null default false,
   -- Local folders the executive team may read (never write): the product's

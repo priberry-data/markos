@@ -211,7 +211,8 @@ describe('repo digest', () => {
   })
 
   it('knows a secret file by its name', () => {
-    for (const f of ['.env', '.env.production', 'server.pem', 'tls.key', 'id_rsa', 'id_rsa.pub', 'secrets.yaml', 'aws-credentials', 'credentials.json']) {
+    for (const f of ['.env', '.env.production', 'server.pem', 'tls.key', 'id_rsa', 'id_rsa.pub', 'id_ecdsa', 'id_dsa', 'deploy/id_ed25519_sk',
+      '.ssh/config', 'home/.ssh/known_hosts', 'secrets.yaml', 'aws-credentials', 'credentials.json']) {
       expect(isSecretFile(f)).toBe(true)
     }
     for (const f of ['README.md', 'keyboard.ts', 'secretary.md', 'src/index.ts']) expect(isSecretFile(f)).toBe(false)

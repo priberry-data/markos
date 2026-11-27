@@ -21,6 +21,7 @@ export interface ContentPieceData {
   scheduled_at: string | null
   status: string
   edited: boolean
+  updated_at: string
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -39,13 +40,16 @@ function toLocalInput(iso: string | null) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+const draftOf = (piece: ContentPieceData) => ({
+  title: piece.title ?? '', body: piece.body ?? '', hashtags: (piece.hashtags ?? []).join(' '), when: toLocalInput(piece.scheduled_at),
+})
+
 export function ContentPiece({ piece }: { piece: ContentPieceData }) {
   const router = useRouter()
   const [mode, setMode] = useState<null | 'edit' | 'refine' | 'reject' | 'history'>(null)
   const [busy, setBusy] = useState(false)
-  const [draft, setDraft] = useState({
-    title: piece.title ?? '', body: piece.body ?? '', hashtags: (piece.hashtags ?? []).join(' '), when: toLocalInput(piece.scheduled_at),
-  })
+  // Edit opens on the words the card shows now (a rewrite may have landed since it first rendered).
+  const [draft, setDraft] = useState(() => draftOf(piece))
   const [text, setText] = useState('')
   const [versions, setVersions] = useState<Array<{ id: string; reason: string | null; created_at: string; content: { body?: string } }> | null>(null)
 
@@ -61,13 +65,15 @@ export function ContentPiece({ piece }: { piece: ContentPieceData }) {
         method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const out = await res.json()
-      if (!res.ok) throw new Error(out.error ?? 'Something went wrong')
+      if (!res.ok) throw Object.assign(new Error(out.error ?? 'Something went wrong'), { status: res.status })
       toast.success(typeof success === 'string' ? success : success(out))
       setMode(null)
       setText('')
       router.refresh()
     } catch (err) {
       toast.error((err as Error).message)
+      // Refused because the card is out of date (Approve checks the version shown): show what's there now.
+      if ((err as { status?: number }).status === 409) router.refresh()
     } finally {
       setBusy(false)
     }
@@ -170,7 +176,7 @@ export function ContentPiece({ piece }: { piece: ContentPieceData }) {
         <div className="flex flex-wrap items-center gap-1 mt-3 pt-3 border-t border-mk-line">
           {piece.status === 'draft' && (
             <button disabled={busy}
-              onClick={() => call('POST', { action: 'approve' }, piece.platform === 'twitter' || piece.platform === 'linkedin'
+              onClick={() => call('POST', { action: 'approve', version: piece.updated_at }, piece.platform === 'twitter' || piece.platform === 'linkedin'
                 ? 'Approved — it posts at its scheduled time if the account is connected' : 'Approved')}
               title={piece.platform === 'twitter' || piece.platform === 'linkedin'
                 ? 'Approving is your OK to publish: if this account is connected in Settings, MarkOS posts it at its scheduled time.' : undefined}
@@ -185,7 +191,7 @@ export function ContentPiece({ piece }: { piece: ContentPieceData }) {
             </button>
           )}
           <CopyButton text={fullText} />
-          <button onClick={() => setMode('edit')} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-mk-muted hover:text-mk-text hover:bg-mk-line"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+          <button onClick={() => { setDraft(draftOf(piece)); setMode('edit') }} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-mk-muted hover:text-mk-text hover:bg-mk-line"><Pencil className="w-3.5 h-3.5" /> Edit</button>
           <button onClick={() => setMode(mode === 'refine' ? null : 'refine')} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-mk-muted hover:text-mk-text hover:bg-mk-line"><Sparkles className="w-3.5 h-3.5" /> Rewrite…</button>
           <button onClick={openHistory} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-mk-muted hover:text-mk-text hover:bg-mk-line"><History className="w-3.5 h-3.5" /> History</button>
           {piece.status !== 'rejected' && piece.status !== 'posted' && (

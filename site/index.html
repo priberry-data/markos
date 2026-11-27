@@ -112,7 +112,7 @@ footer p{margin:6px 0}
   <div class="grid steps">
     <div class="card"><h4>Install</h4><p>One command on Mac, Windows or Linux. It checks your computer, sets up a small local database and puts MarkOS on your Desktop.</p></div>
     <div class="card"><h4>Show it your products</h4><p>Add each product and its repo folder. The team reads it and asks you to confirm what it understood. Where docs disagree, it lists both and guesses nothing.</p></div>
-    <div class="card"><h4>Wake up to a brief</h4><p>The night shift researches, drafts and reports, within a nightly cap you set. You approve, edit or reject in the morning.</p></div>
+    <div class="card"><h4>Wake up to a brief</h4><p>The night shift researches, drafts and reports, within a nightly cap you set (MarkOS can't see prices for API keys other than Gemini, Anthropic and OpenRouter: set a spending limit with that provider). Start it from the brief, or run <code>node scripts/markos.mjs night-shift</code> once in the MarkOS folder and it runs every night at 02:00. You approve, edit or reject in the morning.</p></div>
   </div>
 </section>
 
@@ -136,7 +136,7 @@ footer p{margin:6px 0}
     <tr><th>Promise</th><th>Checked by</th></tr>
     <tr><td><span class="check">✓</span>Agents get only the tools a step needs: web search, or read-only file tools. Never write, edit or shell tools.</td><td><code>tests/llm/claude-code.test.ts</code></td></tr>
     <tr><td><span class="check">✓</span>One call never gets both the web and your files, so a web page can't steer an agent into leaking a file.</td><td><code>tests/llm/claude-code.test.ts</code></td></tr>
-    <tr><td><span class="check">✓</span>File-reading calls are denied <code>.env*</code>, <code>*.pem</code> and SSH keys.</td><td><code>tests/llm/claude-code.test.ts</code></td></tr>
+    <tr><td><span class="check">✓</span>File-reading calls are denied <code>.env*</code>, <code>*.pem</code>, SSH keys and anything in a <code>.ssh</code> folder. Checked against real Claude Code on a Mac; on Windows the rules use Claude Code's documented path form, not yet checked against real Claude Code there.</td><td><code>tests/llm/claude-code.test.ts</code></td></tr>
     <tr><td><span class="check">✓</span>Any other AI gets no tool that touches your computer: text in, text out (a web search, where the AI does one, runs on the provider's servers). MarkOS reads a digest of your code for it, never <code>.env*</code>, keys, links or anything git ignores.</td><td><code>tests/engine/repo-digest.test.ts</code>, <code>tests/llm/openai-compat.test.ts</code>, <code>tests/llm/gemini.test.ts</code>, <code>tests/llm/anthropic.test.ts</code></td></tr>
     <tr><td><span class="check">✓</span>An AI that can't search the web is never asked to pretend: searches go to one that can, or the agent says so.</td><td><code>tests/llm/routing.test.ts</code></td></tr>
     <tr><td><span class="check">✓</span>The app answers only this computer. Other websites can't change anything.</td><td><code>tests/utils/local-guard.test.ts</code></td></tr>
@@ -151,7 +151,7 @@ footer p{margin:6px 0}
   <div class="facts">
     <div class="card"><b>~390 MB</b><span>for the whole app, measured on a Mac with every page loaded</span></div>
     <div class="card"><b>127.0.0.1</b><span>the only address it listens on</span></div>
-    <div class="card"><b>Backed up</b><span>after every night shift, to a folder you choose (iCloud Drive on a Mac); last 30 kept</span></div>
+    <div class="card"><b>Backed up</b><span>after each scheduled night shift, to iCloud Drive on a Mac when it's on, otherwise MarkOS's data folder; last 30 kept</span></div>
     <div class="card"><b>$0</b><span>per call on your Claude plan, or with a free model on your computer (Ollama, LM Studio)</span></div>
   </div>
 </section>
@@ -162,7 +162,7 @@ footer p{margin:6px 0}
     <li>A Mac (Apple silicon or Intel), a Windows 10 or 11 PC (x64), or a Linux machine (x64 or arm64). Every change is installed and tested from scratch on Windows, Linux and an Intel Mac by the repo's CI, and on an Apple-silicon Mac by hand.</li>
     <li>Node 22 or newer.</li>
     <li>An AI, whichever you like. You pick it when MarkOS opens: your Claude plan through Claude Code, an API key (Gemini, OpenRouter, OpenAI, Groq, DeepSeek, Mistral and others), or a free model on your own computer with <a href="https://ollama.com">Ollama</a> or <a href="https://lmstudio.ai">LM Studio</a>. Web search needs Claude Code, OpenRouter, the Anthropic API, or a Gemini key with billing on.</li>
-    <li>CI runs MarkOS against a real local model on every change. The hosted APIs need keys, so they're checked against the OpenAI chat-completions format, not live.</li>
+    <li>CI runs MarkOS against a real local model on every change. The hosted APIs need keys, so they're checked against stubs, not live.</li>
     <li>That's all. Adding meetings to your calendar app works on a Mac only; on Windows and Linux they stay in MarkOS's own calendar.</li>
     <li>MarkOS is new and has been used day to day on a Mac. If a step fails on your machine, <a href="https://github.com/priberry-data/markos/issues">open an issue</a> and we'll fix it.</li>
   </ul>

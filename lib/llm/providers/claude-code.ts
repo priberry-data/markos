@@ -63,11 +63,12 @@ const EFFORT = { none: 'low', light: 'medium', deep: 'high' } as const
 
 /**
  * Files no agent may read, in any folder it is given. Secrets live in `.env*`
- * (MarkOS's own `.env.local` among them), and private keys in `*.pem` / `id_*`.
+ * (MarkOS's own `.env.local` among them), private keys in `*.pem` and SSH's
+ * `id_rsa` / `id_ed25519` / `id_ecdsa` / `id_dsa`, and anything in a `.ssh` folder.
  * Claude Code applies Read deny rules to Grep and Glob too, best effort; Grep
  * also skips gitignored files such as `.env.local` by default.
  */
-export const SECRET_FILE_GLOBS = ['**/.env*', '**/*.pem', '**/id_rsa*', '**/id_ed25519*'] as const
+export const SECRET_FILE_GLOBS = ['**/.env*', '**/*.pem', '**/id_rsa*', '**/id_ed25519*', '**/id_ecdsa*', '**/id_dsa*', '**/.ssh/**'] as const
 export const MARKOS_PRIVATE_FILES = ['ai.json', 'local-token'] as const
 
 /**

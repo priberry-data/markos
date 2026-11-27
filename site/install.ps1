@@ -22,7 +22,17 @@ if (Test-Path (Join-Path $dir '.git')) {
   Write-Host "Downloading MarkOS into $dir..."
   $zip = Join-Path ([IO.Path]::GetTempPath()) 'markos-download.zip'
   $tmp = Join-Path ([IO.Path]::GetTempPath()) 'markos-download'
-  Invoke-WebRequest "$repo/archive/refs/heads/$ref.zip" -OutFile $zip -UseBasicParsing
+  # GitHub sometimes answers a download with a passing error (a 502 or 504): try three times.
+  $tries = 0
+  while ($true) {
+    try { Invoke-WebRequest "$repo/archive/refs/heads/$ref.zip" -OutFile $zip -UseBasicParsing; break }
+    catch {
+      $tries++
+      if ($tries -ge 3) { throw }
+      Write-Host "The download didn't work ($($_.Exception.Message)). Trying again..."
+      Start-Sleep -Seconds (5 * $tries)
+    }
+  }
   if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
   Expand-Archive $zip -DestinationPath $tmp -Force
   New-Item -ItemType Directory -Force -Path $dir | Out-Null

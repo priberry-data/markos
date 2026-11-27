@@ -19,6 +19,7 @@ export interface PipelineRow {
   next_step: string | null
   pitch_subject: string | null
   pitch_body: string | null
+  updated_at: string | null
 }
 
 const STAGES = ['identified', 'contacted', 'replied', 'meeting', 'won', 'lost', 'dropped']
@@ -26,26 +27,64 @@ const STAGES = ['identified', 'contacted', 'replied', 'meeting', 'won', 'lost', 
 export function PipelineCard({ r, canSend }: { r: PipelineRow; canSend: boolean }) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
-  const [contact, setContact] = useState(r.contact ?? '')
-  const [subject, setSubject] = useState(r.pitch_subject ?? '')
-  const [body, setBody] = useState(r.pitch_body ?? '')
+  // What's saved. A field the founder hasn't changed takes up a newly saved value (from another
+  // window, say); a field they're editing keeps their words, including words typed after their own
+  // Save or Confirm and before the page caught up.
+  const saved = { contact: r.contact ?? '', subject: r.pitch_subject ?? '', body: r.pitch_body ?? '' }
+  const [seen, setSeen] = useState(saved)
+  const [contact, setContact] = useState(saved.contact)
+  const [subject, setSubject] = useState(saved.subject)
+  const [body, setBody] = useState(saved.body)
   const [open, setOpen] = useState(false)
+  if (saved.contact !== seen.contact || saved.subject !== seen.subject || saved.body !== seen.body) {
+    if (saved.contact !== seen.contact && contact === seen.contact) setContact(saved.contact)
+    if (saved.subject !== seen.subject && subject === seen.subject) setSubject(saved.subject)
+    if (saved.body !== seen.body && body === seen.body) setBody(saved.body)
+    setSeen(saved)
+  }
 
+  // Refused because the page is out of date (Send checks the version shown): show what's there now.
+  const failed = (err: unknown) => {
+    toast.error((err as Error).message)
+    if ((err as { status?: number }).status === 409) router.refresh()
+  }
   async function act(key: string, url: string, method: string, payload: unknown, ok: string) {
     setBusy(key)
     try {
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
+      if (!res.ok) throw Object.assign(new Error(json.error ?? 'Something went wrong'), { status: res.status })
       toast.success(ok)
       router.refresh()
     } catch (err) {
-      toast.error((err as Error).message)
+      failed(err)
     } finally {
       setBusy(null)
     }
   }
   const patch = (key: string, payload: Record<string, unknown>, ok: string) => act(key, `/api/pipeline/${r.id}`, 'PATCH', payload, ok)
+  // Send goes with the saved pitch only, so the card must show it: save edits first.
+  const unsaved = contact !== saved.contact || subject !== saved.subject || body !== saved.body
+  async function send(force = false): Promise<void> {
+    setBusy('send')
+    try {
+      const res = await fetch(`/api/pipeline/${r.id}/send`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force, version: r.updated_at, to: contact, subject, body }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        if (json.canForce && confirm(`${json.error} Send this pitch again?`)) return await send(true)
+        throw Object.assign(new Error(json.error ?? 'Something went wrong'), { status: res.status })
+      }
+      toast.success(`Sent to ${r.name}`)
+      router.refresh()
+    } catch (err) {
+      failed(err)
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <div className={`${tone.inset} px-4 py-3`}>
@@ -74,9 +113,9 @@ export function PipelineCard({ r, canSend }: { r: PipelineRow; canSend: boolean 
           <textarea className={`${tone.input} min-h-[120px]`} value={body} onChange={e => setBody(e.target.value)} placeholder="Pitch" />
           <div className="flex gap-2">
             <button className={tone.ghostBtn} disabled={busy !== null} onClick={() => patch('pitch', { pitch_subject: subject, pitch_body: body }, 'Pitch saved')}>Save pitch</button>
-            <button className={tone.primaryBtn} disabled={busy !== null || !canSend || !r.contact_confirmed || contact !== r.contact}
-              title={!canSend ? 'Set RESEND_API_KEY and RESEND_FROM_EMAIL to send' : !r.contact_confirmed ? 'Confirm the address first' : undefined}
-              onClick={() => act('send', `/api/pipeline/${r.id}/send`, 'POST', {}, `Sent to ${r.name}`)}>
+            <button className={tone.primaryBtn} disabled={busy !== null || !canSend || !r.contact_confirmed || unsaved}
+              title={!canSend ? 'Set RESEND_API_KEY and RESEND_FROM_EMAIL to send' : !r.contact_confirmed ? 'Confirm the address first' : unsaved ? 'Save your edits first' : undefined}
+              onClick={() => send()}>
               {busy === 'send' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />} Send pitch
             </button>
             <button className={tone.ghostBtn} disabled={busy !== null} onClick={() => patch('stage', { stage: 'contacted' }, 'Marked as contacted')}>I sent it myself</button>

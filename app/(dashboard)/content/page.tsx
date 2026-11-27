@@ -33,7 +33,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
   if (!product) return null
 
   let query = supabase.from('content_items')
-    .select('id, platform, content_type, title, hook, body, hashtags, cta, goal, visual_idea, scheduled_at, status, edited')
+    .select('id, platform, content_type, title, hook, body, hashtags, cta, goal, visual_idea, scheduled_at, status, edited, updated_at')
     .eq('product_id', product.id).neq('status', 'superseded').order('scheduled_at', { ascending: true, nullsFirst: false })
   if (status !== 'all') query = query.eq('status', status)
   if (platform) query = query.eq('platform', platform)

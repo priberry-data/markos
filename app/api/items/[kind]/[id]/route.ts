@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import {
-  confirmContact, editContent, editOutreach, refineItem, rejectItem, setContentStatus, setOutreachStatus,
+  APPROVE_CHANGED, APPROVE_RELOAD, approveContent, confirmContact, editContent, editOutreach, refineItem, rejectItem, setContentStatus, setOutreachStatus,
 } from '@/lib/engine/items'
 import { describeFailure } from '@/lib/engine/orchestrator'
 
@@ -23,7 +23,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ kind: 
 
 /**
  * Actions on an item.
- *   { action: 'approve' | 'posted' | 'draft' }           content status
+ *   { action: 'approve', version }                        approve the version on screen (its updated_at)
+ *   { action: 'posted' | 'draft' }                        content status
  *   { action: 'status', status }                          outreach pipeline stage
  *   { action: 'reject', reason? }                         reason becomes a house rule
  *   { action: 'refine', instruction }                     rewrite with an instruction
@@ -33,15 +34,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ kind: s
   const { kind, id } = await params
   if (!(kind in TABLES)) return NextResponse.json({ error: 'Unknown item type' }, { status: 404 })
   const table = TABLES[kind as Kind]
-  const body = (await req.json().catch(() => ({}))) as { action?: string; reason?: string; instruction?: string; status?: string }
+  const body = (await req.json().catch(() => ({}))) as { action?: string; reason?: string; instruction?: string; status?: string; version?: unknown }
 
   try {
     switch (body.action) {
       case 'approve':
+        if (kind !== 'content') throw new Error('Use action "status" for outreach')
+        await approveContent(id, typeof body.version === 'string' ? body.version : '')
+        break
       case 'posted':
       case 'draft':
         if (kind !== 'content') throw new Error('Use action "status" for outreach')
-        await setContentStatus(id, body.action === 'approve' ? 'approved' : body.action)
+        await setContentStatus(id, body.action)
         break
       case 'status':
         if (kind !== 'outreach') throw new Error('Use approve/posted for content')
@@ -60,6 +64,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ kind: s
     }
     return NextResponse.json({ success: true })
   } catch (err) {
-    return NextResponse.json({ error: describeFailure(err).message }, { status: 400 })
+    const message = describeFailure(err).message
+    // An Approve refused because the card was out of date is a 409: the page then shows what's there now.
+    const stale = message === APPROVE_CHANGED || message === APPROVE_RELOAD
+    return NextResponse.json({ error: message }, { status: stale ? 409 : 400 })
   }
 }

@@ -21,7 +21,7 @@ const props = (req: ProviderRequest) => Object.keys((req.jsonSchema?.properties 
 
 function fakeOffice(req: ProviderRequest) {
   const k = props(req)
-  if (k.includes('pre_read')) return { text: JSON.stringify({ title: 'CFO · pricing', purpose: 'Decide the Employer price', agenda: [{ item: 'Price', owner: 'cfo', decision_needed: true }], pre_read: 'Options A and B.' }) }
+  if (k.includes('pre_read')) return { text: JSON.stringify({ title: 'CFO · pricing', purpose: 'Decide the team plan price', agenda: [{ item: 'Price', owner: 'cfo', decision_needed: true }], pre_read: 'Options A and B.' }) }
   if (k.includes('replies')) return { text: JSON.stringify({ replies: [{ speaker: 'cfo', text: 'I recommend B: ₹3,999 base.' }, { speaker: 'cmo', text: 'Not in this meeting' }] }) }
   if (k.includes('action_items')) return { text: JSON.stringify({
     summary: 'Chose B.', decisions: [{ decision: 'Price B', by: 'founder' }], open_questions: [],
