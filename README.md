@@ -41,7 +41,7 @@ OpenRouter's documented search format, not live). If anything fails on your mach
 [open an issue](https://github.com/priberry-data/markos/issues).
 
 - **Mac** (Apple silicon or Intel), **Windows 10 or 11** (x64), or **Linux** (x64 or arm64)
-- Node 22 or newer (`node --version`), from [nodejs.org](https://nodejs.org) or your package manager
+- Node 22 or newer (`node --version`), from [nodejs.org](https://nodejs.org), your package manager, nvm, fnm or volta
 - An AI for the team, any one of these (you pick it in Settings → Your AI after installing):
   - **Claude Code**, signed in to your Claude plan: no per-call bill.
     Mac or Linux: `curl -fsSL https://claude.ai/install.sh | bash` · Windows (PowerShell):

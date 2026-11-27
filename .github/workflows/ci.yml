@@ -139,6 +139,19 @@ jobs:
       - name: it said no AI is set up yet
         shell: bash
         run: grep "No AI set up yet" "$RUNNER_TEMP/install.log"
+      - name: the Desktop app and the night shift use the installer's Node (Mac)
+        # They start from Finder or launchd with almost no environment, through scripts/lib-start.sh.
+        # The runner also has a Node on lib-start.sh's fixed PATH, so this only passes if the Node
+        # the installer saved wins: the same lookup that finds an nvm, fnm or volta Node.
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          got=$(env -i HOME="$HOME" MARKOS_HOME="$MARKOS_HOME" REPO="$PWD" LOG="$RUNNER_TEMP/launcher-logs" /bin/zsh -c 'source scripts/lib-start.sh; print -r -- "$NODE"')
+          want=$(node -p process.execPath)
+          echo "lib-start.sh picked: $got"
+          echo "the installer used:  $want"
+          echo "also on the fixed PATH: $(ls /opt/homebrew/bin/node /usr/local/bin/node 2>/dev/null | tr '\n' ' ')"
+          [ "$got" = "$want" ]
       - name: start and health check
         timeout-minutes: 10
         run: |

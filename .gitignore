@@ -53,3 +53,6 @@ test-db/.native/
 # Supabase CLI local state
 **/supabase/.temp/
 **/supabase/.branches/
+
+# wrangler (a Pages deploy from a checkout without node_modules keeps its cache here)
+.wrangler/

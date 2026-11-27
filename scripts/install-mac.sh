@@ -8,6 +8,12 @@ cd "$(dirname "$0")/.."
 NODE="$HOME/.local/node-arm64/bin/node"; [ -x "$NODE" ] || NODE="$(command -v node || true)"
 [ -n "$NODE" ] || { echo "MarkOS needs Node 22 or newer: https://nodejs.org"; exit 1; }
 export PATH="$(dirname "$NODE"):$PATH"
+# lib-start.sh (the database setup below, the Desktop app, the night shift) runs with a fixed PATH,
+# which misses Node from nvm, fnm or volta, so tell it which Node this is. process.execPath is the
+# binary itself, not a version manager's shim or per-shell link.
+SUPPORT="${MARKOS_HOME:-$HOME/Library/Application Support/MarkOS}"
+mkdir -p "$SUPPORT"
+"$NODE" -p process.execPath > "$SUPPORT/node-path"
 
 echo "1/4  Checking this Mac…"
 ./scripts/preflight.sh "$@"

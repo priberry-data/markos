@@ -5,18 +5,23 @@
 
 export PATH="$HOME/.local/node-arm64/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+# MARKOS_HOME moves MarkOS's files (as in scripts/paths.mjs); the default is the usual Mac folder.
+SUPPORT="${MARKOS_HOME:-$HOME/Library/Application Support/MarkOS}"
 
 URL="http://localhost:3001"          # keep localhost: social OAuth redirects depend on it
-# A native arm64 Node in ~/.local/node-arm64 wins (Homebrew's can be x86 under Rosetta); else the first node on PATH.
+# A native arm64 Node in ~/.local/node-arm64 wins (Homebrew's can be x86 under Rosetta). Then the
+# Node the installer used: install-mac.sh saves it, since nvm, fnm and volta keep theirs outside
+# the PATH above. Else the first node on PATH. Its folder goes on the end of PATH, for anything
+# that runs `node` by name.
 NODE="$HOME/.local/node-arm64/bin/node"
+[ -x "$NODE" ] || NODE="$(cat "$SUPPORT/node-path" 2>/dev/null || true)"
 [ -x "$NODE" ] || NODE="$(command -v node || true)"
+if [ -n "$NODE" ]; then export PATH="$PATH:$(dirname "$NODE")"; fi
 NEXT="$REPO/node_modules/next/dist/bin/next"
 mkdir -p "$LOG"
 
 # The local token: API changes from outside the MarkOS window (the night shift,
 # scripts) must present it. Created once, readable only by this user.
-# MARKOS_HOME moves MarkOS's files (as in scripts/paths.mjs); the default is the usual Mac folder.
-SUPPORT="${MARKOS_HOME:-$HOME/Library/Application Support/MarkOS}"
 TOKEN_FILE="$SUPPORT/local-token"
 if [ ! -s "$TOKEN_FILE" ]; then
   mkdir -p "$(dirname "$TOKEN_FILE")"
@@ -128,7 +133,7 @@ running() { curl -s --max-time 3 "$URL/api/health" | grep -o '"running":[0-9]*' 
 wait_for() { local fn=$1 secs=$2; for i in $(seq 1 $((secs * 2))); do $fn && return 0; sleep 0.5; done; return 1; }
 
 ensure_server() {
-  [ -n "$NODE" ] && [ -x "$NODE" ] || fail "Node wasn't found. Install Node 22 or newer (see README)."
+  [ -n "$NODE" ] && [ -x "$NODE" ] || fail "Node wasn't found. Install Node 22 or newer (see README), then run 'sh install.sh' in $REPO again."
   [ -f "$NEXT" ] || fail "MarkOS dependencies are missing. Run 'npm install' in $REPO."
   cd "$REPO"
   STARTED=""
